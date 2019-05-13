@@ -304,10 +304,7 @@ impl Instruction {
     }
 
     fn parse_string(stream: &mut Iterator<Item = u8>) -> Result<String, Error> {
-        let string_length = stream
-            .next()
-            .ok_or(ParsingError::StringWithoutLenght)?
-            as usize;
+        let string_length = stream.next().ok_or(ParsingError::StringWithoutLenght)? as usize;
         let string_bytes: Vec<u8> = stream.take(string_length).collect();
         let name = String::from_utf8(string_bytes)?;
         Ok(name)
@@ -362,9 +359,7 @@ impl Instruction {
     }
 
     fn parse_value(stream: &mut Iterator<Item = u8>) -> Result<Value, Error> {
-        let flag = stream
-            .next()
-            .ok_or(ParsingError::ValueWithNoFlag)?;
+        let flag = stream.next().ok_or(ParsingError::ValueWithNoFlag)?;
         if flag == 0 {
             Instruction::parse_register(stream).map(Value::Register)
         } else {
@@ -397,9 +392,7 @@ impl TryFrom<Vec<u8>> for Program {
                     &mut source
                 )),
                 0x05 => {
-                    let content = source
-                        .next()
-                        .ok_or(ParsingError::UnexpectedEndOfStream)?;
+                    let content = source.next().ok_or(ParsingError::UnexpectedEndOfStream)?;
                     let value = Value::Constant(u64::from(content));
                     Ok(Instruction::Ld8 {
                         value,

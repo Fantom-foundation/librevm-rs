@@ -88,10 +88,10 @@ use failure::Error;
 use libc::scanf;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::f64::EPSILON;
 use std::iter::Iterator;
 use std::ops::Rem;
 use std::rc::Rc;
-use std::f64::EPSILON;
 
 mod allocator;
 mod error;
@@ -889,20 +889,26 @@ impl Cpu {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = (destiny_value - (match value {
+                    let new_value = (destiny_value
+                        - (match value {
                             Value::Register(s) => registers.get_f64(s as usize)?,
                             Value::Constant(v) => v as f64,
-                        })).abs() < EPSILON;
+                        }))
+                    .abs()
+                        < EPSILON;
                     registers.set_i64(register as usize, new_value as i64);
                 }
                 Instruction::Fne { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = (destiny_value - (match value {
+                    let new_value = (destiny_value
+                        - (match value {
                             Value::Register(s) => registers.get_f64(s as usize)?,
                             Value::Constant(v) => v as f64,
-                        })).abs() >= EPSILON;
+                        }))
+                    .abs()
+                        >= EPSILON;
                     registers.set_i64(register as usize, new_value as i64);
                 }
                 Instruction::Flt { register, value } => {
