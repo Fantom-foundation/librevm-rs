@@ -316,7 +316,7 @@ impl Instruction {
             Err(ParsingError::UnexpectedEndOfStream)?;
         }
         let byte_pairs: &[u16] =
-            unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const u16, 1) };
+            unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
         Ok(byte_pairs[0])
     }
 
@@ -324,7 +324,7 @@ impl Instruction {
         let bytes: Vec<u8> = stream.take(4).collect();
         if bytes.len() == 4 {
             let byte_pairs: &[u32] =
-                unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const u32, 1) };
+                unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
             Ok(byte_pairs[0])
         } else {
             Err(Error::from(ParsingError::UnexpectedEndOfStream))
@@ -335,7 +335,7 @@ impl Instruction {
         let bytes: Vec<u8> = stream.take(8).collect();
         if bytes.len() == 8 {
             let byte_groups: &[i64] =
-                unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const i64, 1) };
+                unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
             Ok(byte_groups[0])
         } else {
             Err(Error::from(ParsingError::U64LacksInformation))
@@ -348,7 +348,7 @@ impl Instruction {
             Err(ParsingError::U64LacksInformation)?;
         }
         let byte_groups: &[u64] =
-            unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const u64, 1) };
+            unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
         Ok(byte_groups[0])
     }
 

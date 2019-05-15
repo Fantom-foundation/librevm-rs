@@ -61,10 +61,17 @@ impl Server {
             let mut cpu = Cpu::new(cpu_memory).unwrap();
             loop {
                 let events = node.node.get_ordered_events().unwrap();
-                let transactions: Vec<Vec<u8>> = events.iter().flat_map(|e| e.payload()).collect();
+                let transactions: Vec<Vec<u8>> = events
+                    .iter()
+                    .flat_map(libconsensus_lachesis_rs::Event::payload)
+                    .collect();
                 if transactions.len() > next_to_process {
-                    for i in next_to_process..transactions.len() - 1 {
-                        let program = Program::try_from(transactions[i].clone()).unwrap();
+                    for i in transactions
+                        .iter()
+                        .take(transactions.len() - 1)
+                        .skip(next_to_process)
+                    {
+                        let program = Program::try_from(i.clone()).unwrap();
                         cpu.execute(program).unwrap();
                     }
                 }
@@ -91,7 +98,11 @@ impl Server {
 }
 
 fn parse_peer(input: String) -> Result<(String, usize), Error> {
-    let elements: Vec<String> = input.clone().split(':').map(|s| s.to_string()).collect();
+    let elements: Vec<String> = input
+        .clone()
+        .split(',')
+        .map(std::string::ToString::to_string)
+        .collect();
     if elements.len() == 2 {
         Ok((elements[0].clone(), usize::from_str(&elements[1])?))
     } else {
@@ -109,7 +120,11 @@ fn parse_peers(input: String) -> Result<Vec<(String, usize)>, Error> {
 fn main() {
     env_logger::init();
     let config: Config = Config::generate().unwrap();
-    let ids: Vec<String> = config.peer_ids.split(',').map(|s| s.to_string()).collect();
+    let ids: Vec<String> = config
+        .peer_ids
+        .split(',')
+        .map(std::string::ToString::to_string)
+        .collect();
     let peers = parse_peers(config.peer_hosts).unwrap();
     if peers.len() != ids.len() {
         panic!("Number of peer ids mismatches number of peer addresses");
