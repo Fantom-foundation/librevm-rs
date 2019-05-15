@@ -85,7 +85,7 @@ use crate::instruction::{Instruction, Program, Value};
 use crate::memory::Memory;
 use crate::register_set::RegisterSet;
 use failure::Error;
-use libc::scanf;
+//use libc::scanf;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::f64::EPSILON;
@@ -113,29 +113,28 @@ struct NativeFunctions {
 
 impl NativeFunctions {
     fn puts(&self, args: Vec<u8>) -> Result<u64, Error> {
-        if args.len() == 1 {
-            self.register_stack
-                .borrow()
-                .last()
-                .unwrap()
-                .to_string(args[0] as usize)
-                .map(|s| {
-                    println!("{}", s);
-                    0
-                })
-        } else {
-            Err(Error::from(RuntimeError::WrongArgumentsNumber {
+        if args.len() != 1 {
+            Err(RuntimeError::WrongArgumentsNumber {
                 name: "puts".to_owned(),
                 expected: 1,
                 got: args.len(),
-            }))
+            })?;
         }
+        self.register_stack
+            .borrow()
+            .last()
+            .unwrap()
+            .to_string(args[0] as usize)
+            .map(|s| {
+                println!("{}", s);
+                0
+            })
     }
 
     fn printf(&self, args: Vec<u8>) -> Result<u64, Error> {
         let rs = self.register_stack.borrow();
         let registers: &RegisterSet = rs.last().unwrap();
-        match args.len() {
+        let r = match args.len() {
             1 => {
                 let content = registers.to_string(args[0] as usize)?;
                 rt_println!(content).unwrap();
@@ -221,14 +220,16 @@ impl NativeFunctions {
                 .unwrap();
                 Ok(0)
             }
-            n => Err(Error::from(RuntimeError::WrongArgumentsNumber {
+            n => Err(RuntimeError::WrongArgumentsNumber {
                 name: "printf".to_owned(),
                 expected: 8,
                 got: n,
-            })),
-        }
+            }),
+        }?;
+        Ok(r)
     }
 
+    /*
     fn scanf(&self, args: Vec<u8>) -> Result<u64, Error> {
         if args.is_empty() {
             Err(RuntimeError::WrongArgumentsNumber {
@@ -306,53 +307,52 @@ impl NativeFunctions {
                     args_ptr.as_mut_ptr().add(7),
                 )
             }),
-            n => Err(Error::from(RuntimeError::WrongArgumentsNumber {
+            n => Err(RuntimeError::WrongArgumentsNumber {
                 name: "scanf".to_owned(),
                 expected: 8,
                 got: n,
-            })),
+            }),
         }?;
         Ok(r as u64)
     }
+    */
 
     fn exit(&self, args: Vec<u8>) -> Result<u64, Error> {
         if args.len() != 1 {
-            Err(Error::from(RuntimeError::WrongArgumentsNumber {
+            Err(RuntimeError::WrongArgumentsNumber {
                 name: "exit".to_owned(),
                 expected: 1,
                 got: args.len(),
-            }))
-        } else {
-            Err(Error::from(RuntimeError::ProgramEnded {
-                errno: self.register_stack.borrow().last().unwrap().get(0)?,
-            }))
+            })?;
         }
+        Err(RuntimeError::ProgramEnded {
+            errno: self.register_stack.borrow().last().unwrap().get(0)?,
+        })?;
+        Ok(0)
     }
 
     fn malloc(&self, args: Vec<u8>) -> Result<u64, Error> {
         if args.len() != 1 {
-            Err(Error::from(RuntimeError::WrongArgumentsNumber {
+            Err(RuntimeError::WrongArgumentsNumber {
                 name: "malloc".to_owned(),
                 expected: 1,
                 got: args.len(),
-            }))
-        } else {
-            let size = self.register_stack.borrow().last().unwrap().get(0)? as usize;
-            self.allocator.borrow_mut().malloc(size).map(|v| v as u64)
+            })?;
         }
+        let size = self.register_stack.borrow().last().unwrap().get(0)? as usize;
+        self.allocator.borrow_mut().malloc(size).map(|v| v as u64)
     }
 
     fn free(&self, args: Vec<u8>) -> Result<u64, Error> {
         if args.len() != 1 {
-            Err(Error::from(RuntimeError::WrongArgumentsNumber {
+            Err(RuntimeError::WrongArgumentsNumber {
                 name: "free".to_owned(),
                 expected: 1,
                 got: args.len(),
-            }))
-        } else {
-            let address = self.register_stack.borrow().last().unwrap().get(0)? as usize;
-            self.allocator.borrow_mut().free(address).map(|_| 0)
+            })?;
         }
+        let address = self.register_stack.borrow().last().unwrap().get(0)? as usize;
+        self.allocator.borrow_mut().free(address).map(|_| 0)
     }
 }
 
