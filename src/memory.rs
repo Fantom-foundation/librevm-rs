@@ -205,16 +205,6 @@ mod tests {
     }
 
     #[test]
-    fn it_should_copy_a_u64_aray() {
-        let data = &[1u64];
-        let memory = Memory::new(3);
-        memory.copy_u64_vector(data, 1);
-        assert_eq!(memory.0.borrow()[0], 0);
-        assert_eq!(memory.0.borrow()[1], 1);
-        assert_eq!(memory.0.borrow()[2], 0);
-    }
-
-    #[test]
     fn it_should_copy_a_u64() {
         let memory = Memory::new(3);
         memory.copy_u64(42, 1);
