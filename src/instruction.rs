@@ -315,31 +315,38 @@ impl Instruction {
         if bytes.len() != 2 {
             Err(ParsingError::UnexpectedEndOfStream)?;
         }
+        #[allow(transmute_ptr_to_ptr)]
         let byte_pairs: &[u16] =
-            unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
+        unsafe {
+            std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1)
+        };
         Ok(byte_pairs[0])
     }
 
     fn parse_u32(stream: &mut Iterator<Item = u8>) -> Result<u32, Error> {
         let bytes: Vec<u8> = stream.take(4).collect();
-        if bytes.len() == 4 {
-            let byte_pairs: &[u32] =
-                unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
-            Ok(byte_pairs[0])
-        } else {
-            Err(Error::from(ParsingError::UnexpectedEndOfStream))
+        if bytes.len() != 4 {
+            Err(ParsingError::UnexpectedEndOfStream)?;
         }
+        #[allow(transmute_ptr_to_ptr)]
+        let byte_pairs: &[u32] =
+        unsafe {
+            std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1)
+        };
+        Ok(byte_pairs[0])
     }
 
     fn parse_i64(stream: &mut Iterator<Item = u8>) -> Result<i64, Error> {
         let bytes: Vec<u8> = stream.take(8).collect();
-        if bytes.len() == 8 {
-            let byte_groups: &[i64] =
-                unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
-            Ok(byte_groups[0])
-        } else {
-            Err(Error::from(ParsingError::U64LacksInformation))
+        if bytes.len() != 8 {
+            Err(ParsingError::U64LacksInformation)?;
         }
+        #[allow(transmute_ptr_to_ptr)]
+        let byte_groups: &[i64] =
+        unsafe {
+            std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1)
+        };
+        Ok(byte_groups[0])
     }
 
     fn parse_u64(stream: &mut Iterator<Item = u8>) -> Result<u64, Error> {
@@ -347,8 +354,11 @@ impl Instruction {
         if bytes.len() != 8 {
             Err(ParsingError::U64LacksInformation)?;
         }
+        #[allow(transmute_ptr_to_ptr)]
         let byte_groups: &[u64] =
-            unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
+        unsafe {
+            std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1)
+        };
         Ok(byte_groups[0])
     }
 

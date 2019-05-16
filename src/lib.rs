@@ -976,53 +976,10 @@ impl Cpu {
                     return_register,
                     arguments,
                 } => {
-                    let native_functions = NativeFunctions {
-                        allocator: self.allocator.clone(),
-                        register_stack: self.register_stack.clone(),
-                    };
-                    let rc = self.register_stack.borrow();
-                    let function = {
-                        let registers = rc.last().unwrap();
-                        registers.get_t(return_register as usize)?
-                    };
-                    match function {
-                        Function::Native(f) => {
-                            let r = f(
-                                &native_functions,
-                                arguments
-                                    .to_vec()
-                                    .iter()
-                                    .filter(|v| v.is_some())
-                                    .map(|v| v.unwrap())
-                                    .collect(),
-                            )?;
-                            let mut rc = self.register_stack.borrow_mut();
-                            let registers = rc.last_mut().unwrap();
-                            registers.set(return_register as usize, r)?;
-                        }
-                        Function::UserDefined(new_i, _nargs, _skip) => {
-                            let new_i = *new_i;
-                            self.call_stack.push((i, return_register));
-                            i = new_i;
-                            let new_register_set = self.create_new_register_set()?;
-                            self.register_stack.borrow_mut().push(new_register_set);
-                        }
-                    };
+                    self.call_function(&mut i, return_register, arguments)?;
                 }
                 Instruction::Ret { value } => {
-                    let (new_i, r) = self
-                        .call_stack
-                        .pop()
-                        .ok_or(RuntimeError::ReturnOnNoFunction)?;
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let ret_value = match value {
-                        Value::Constant(v) => v,
-                        Value::Register(r) => registers.get(r as usize)?,
-                    };
-                    self.register_stack.borrow_mut().pop();
-                    registers.set(r as usize, ret_value)?;
-                    i = new_i;
+                    self.return_from_function(&mut i, value)?;
                 }
                 Instruction::Leave => {
                     self.register_stack.borrow_mut().pop();
@@ -1036,6 +993,64 @@ impl Cpu {
             }
             i += 1;
         }
+        Ok(())
+    }
+
+    fn return_from_function(&mut self, i: &mut usize, value: Value) -> Result<(), Error> {
+        let (new_i, r) = self
+            .call_stack
+            .pop()
+            .ok_or(RuntimeError::ReturnOnNoFunction)?;
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let ret_value = match value {
+            Value::Constant(v) => v,
+            Value::Register(r) => registers.get(r as usize)?,
+        };
+        self.register_stack.borrow_mut().pop();
+        registers.set(r as usize, ret_value)?;
+        *i = new_i;
+        Ok(())
+    }
+
+    fn call_function(
+        &mut self,
+        i: &mut usize,
+        return_register: u8,
+        arguments: [Option<u8>; 8],
+    ) -> Result<(), Error> {
+        let native_functions = NativeFunctions {
+            allocator: self.allocator.clone(),
+            register_stack: self.register_stack.clone(),
+        };
+        let rc = self.register_stack.borrow();
+        let function = {
+            let registers = rc.last().unwrap();
+            registers.get_t(return_register as usize)?
+        };
+        match function {
+            Function::Native(f) => {
+                let r = f(
+                    &native_functions,
+                    arguments
+                        .to_vec()
+                        .iter()
+                        .filter(|v| v.is_some())
+                        .map(|v| v.unwrap())
+                        .collect(),
+                )?;
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                registers.set(return_register as usize, r)?;
+            }
+            Function::UserDefined(new_i, _nargs, _skip) => {
+                let new_i = *new_i;
+                self.call_stack.push((*i, return_register));
+                *i = new_i;
+                let new_register_set = self.create_new_register_set()?;
+                self.register_stack.borrow_mut().push(new_register_set);
+            }
+        };
         Ok(())
     }
 
