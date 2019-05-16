@@ -315,11 +315,9 @@ impl Instruction {
         if bytes.len() != 2 {
             Err(ParsingError::UnexpectedEndOfStream)?;
         }
-        #[allow(transmute_ptr_to_ptr)]
+        #[allow(clippy::transmute_ptr_to_ptr)]
         let byte_pairs: &[u16] =
-        unsafe {
-            std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1)
-        };
+            unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
         Ok(byte_pairs[0])
     }
 
@@ -328,11 +326,9 @@ impl Instruction {
         if bytes.len() != 4 {
             Err(ParsingError::UnexpectedEndOfStream)?;
         }
-        #[allow(transmute_ptr_to_ptr)]
+        #[allow(clippy::transmute_ptr_to_ptr)]
         let byte_pairs: &[u32] =
-        unsafe {
-            std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1)
-        };
+            unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
         Ok(byte_pairs[0])
     }
 
@@ -341,11 +337,9 @@ impl Instruction {
         if bytes.len() != 8 {
             Err(ParsingError::U64LacksInformation)?;
         }
-        #[allow(transmute_ptr_to_ptr)]
+        #[allow(clippy::transmute_ptr_to_ptr)]
         let byte_groups: &[i64] =
-        unsafe {
-            std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1)
-        };
+            unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
         Ok(byte_groups[0])
     }
 
@@ -354,11 +348,9 @@ impl Instruction {
         if bytes.len() != 8 {
             Err(ParsingError::U64LacksInformation)?;
         }
-        #[allow(transmute_ptr_to_ptr)]
+        #[allow(clippy::transmute_ptr_to_ptr)]
         let byte_groups: &[u64] =
-        unsafe {
-            std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1)
-        };
+            unsafe { std::slice::from_raw_parts(std::mem::transmute(bytes.as_ptr()), 1) };
         Ok(byte_groups[0])
     }
 
