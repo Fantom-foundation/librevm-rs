@@ -706,22 +706,54 @@ impl Cpu {
                     } as u32);
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::Lshr { register, value } => { self.lshr(register, value)?; }
-                Instruction::Ineg { register } => { self.ineg(register)?; }
-                Instruction::Fadd { register, value } => { self.fadd(register, value)?; }
-                Instruction::Fsub { register, value } => { self.fsub(register, value)?; }
-                Instruction::Fmul { register, value } => { self.fmul(register, value)?; }
-                Instruction::Frem { register, value } => { self.frem(register, value)?; }
-                Instruction::Fdiv { register, value } => { self.fdiv(register, value)?; }
-                Instruction::Eq { register, value } => { self.eq(register, value)?; }
-                Instruction::Ne { register, value } => { self.ne(register, value)?; }
-                Instruction::Ult { register, value } => { self.ult(register, value)?; }
-                Instruction::Ule { register, value } => { self.ule(register, value)?; }
-                Instruction::Ugt { register, value } => { self.ugt(register, value)?; }
-                Instruction::Uge { register, value } => { self.uge(register, value)?; }
-                Instruction::Slt { register, value } => { self.slt(register, value)?; }
-                Instruction::Sle { register, value } => { self.sle(register, value)?; }
-                Instruction::Sgt { register, value } => { self.sgt(register, value)?; }
+                Instruction::Lshr { register, value } => {
+                    self.lshr(register, value)?;
+                }
+                Instruction::Ineg { register } => {
+                    self.ineg(register)?;
+                }
+                Instruction::Fadd { register, value } => {
+                    self.fadd(register, value)?;
+                }
+                Instruction::Fsub { register, value } => {
+                    self.fsub(register, value)?;
+                }
+                Instruction::Fmul { register, value } => {
+                    self.fmul(register, value)?;
+                }
+                Instruction::Frem { register, value } => {
+                    self.frem(register, value)?;
+                }
+                Instruction::Fdiv { register, value } => {
+                    self.fdiv(register, value)?;
+                }
+                Instruction::Eq { register, value } => {
+                    self.eq(register, value)?;
+                }
+                Instruction::Ne { register, value } => {
+                    self.ne(register, value)?;
+                }
+                Instruction::Ult { register, value } => {
+                    self.ult(register, value)?;
+                }
+                Instruction::Ule { register, value } => {
+                    self.ule(register, value)?;
+                }
+                Instruction::Ugt { register, value } => {
+                    self.ugt(register, value)?;
+                }
+                Instruction::Uge { register, value } => {
+                    self.uge(register, value)?;
+                }
+                Instruction::Slt { register, value } => {
+                    self.slt(register, value)?;
+                }
+                Instruction::Sle { register, value } => {
+                    self.sle(register, value)?;
+                }
+                Instruction::Sgt { register, value } => {
+                    self.sgt(register, value)?;
+                }
                 Instruction::Sge { register, value } => {
                     self.sge(register, value)?;
                 }
@@ -761,7 +793,9 @@ impl Cpu {
                 Instruction::Ret { value } => {
                     self.return_from_function(&mut i, value)?;
                 }
-                Instruction::Leave => { self.leave(&mut i)?; }
+                Instruction::Leave => {
+                    self.leave(&mut i)?;
+                }
                 _ => panic!("Not implemented yet"),
             }
             i += 1;
@@ -794,9 +828,9 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = destiny_value
             + (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        });
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            });
         registers.set_f64(register as usize, new_value);
         Ok(())
     }
@@ -807,9 +841,9 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = destiny_value
             - (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        });
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            });
         registers.set_f64(register as usize, new_value);
         Ok(())
     }
@@ -820,9 +854,9 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = destiny_value
             * (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        });
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            });
         registers.set_f64(register as usize, new_value);
         Ok(())
     }
@@ -845,9 +879,9 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = destiny_value
             / (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        });
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            });
         registers.set_f64(register as usize, new_value);
         Ok(())
     }
@@ -858,9 +892,9 @@ impl Cpu {
         let destiny_value = registers.get(register as usize)?;
         let new_value = destiny_value
             == (match value {
-            Value::Register(s) => registers.get(s as usize)?,
-            Value::Constant(v) => v,
-        });
+                Value::Register(s) => registers.get(s as usize)?,
+                Value::Constant(v) => v,
+            });
         registers.set(register as usize, new_value as u64)?;
         Ok(())
     }
@@ -871,9 +905,9 @@ impl Cpu {
         let destiny_value = registers.get(register as usize)?;
         let new_value = destiny_value
             != (match value {
-            Value::Register(s) => registers.get(s as usize)?,
-            Value::Constant(v) => v,
-        });
+                Value::Register(s) => registers.get(s as usize)?,
+                Value::Constant(v) => v,
+            });
         registers.set(register as usize, new_value as u64)?;
         Ok(())
     }
@@ -884,9 +918,9 @@ impl Cpu {
         let destiny_value = registers.get(register as usize)?;
         let new_value = destiny_value
             < (match value {
-            Value::Register(s) => registers.get(s as usize)?,
-            Value::Constant(v) => v,
-        });
+                Value::Register(s) => registers.get(s as usize)?,
+                Value::Constant(v) => v,
+            });
         registers.set(register as usize, new_value as u64)?;
         Ok(())
     }
@@ -897,9 +931,9 @@ impl Cpu {
         let destiny_value = registers.get(register as usize)?;
         let new_value = destiny_value
             <= (match value {
-            Value::Register(s) => registers.get(s as usize)?,
-            Value::Constant(v) => v,
-        });
+                Value::Register(s) => registers.get(s as usize)?,
+                Value::Constant(v) => v,
+            });
         registers.set(register as usize, new_value as u64)?;
         Ok(())
     }
@@ -910,9 +944,9 @@ impl Cpu {
         let destiny_value = registers.get(register as usize)?;
         let new_value = destiny_value
             > (match value {
-            Value::Register(s) => registers.get(s as usize)?,
-            Value::Constant(v) => v,
-        });
+                Value::Register(s) => registers.get(s as usize)?,
+                Value::Constant(v) => v,
+            });
         registers.set(register as usize, new_value as u64)?;
         Ok(())
     }
@@ -923,9 +957,9 @@ impl Cpu {
         let destiny_value = registers.get(register as usize)?;
         let new_value = destiny_value
             >= (match value {
-            Value::Register(s) => registers.get(s as usize)?,
-            Value::Constant(v) => v,
-        });
+                Value::Register(s) => registers.get(s as usize)?,
+                Value::Constant(v) => v,
+            });
         registers.set(register as usize, new_value as u64)?;
         Ok(())
     }
@@ -936,9 +970,9 @@ impl Cpu {
         let destiny_value = registers.get_i64(register as usize)?;
         let new_value = destiny_value
             < (match value {
-            Value::Register(s) => registers.get_i64(s as usize)?,
-            Value::Constant(v) => v as i64,
-        });
+                Value::Register(s) => registers.get_i64(s as usize)?,
+                Value::Constant(v) => v as i64,
+            });
         registers.set_i64(register as usize, new_value as i64);
         Ok(())
     }
@@ -949,9 +983,9 @@ impl Cpu {
         let destiny_value = registers.get_i64(register as usize)?;
         let new_value = destiny_value
             <= (match value {
-            Value::Register(s) => registers.get_i64(s as usize)?,
-            Value::Constant(v) => v as i64,
-        });
+                Value::Register(s) => registers.get_i64(s as usize)?,
+                Value::Constant(v) => v as i64,
+            });
         registers.set_i64(register as usize, new_value as i64);
         Ok(())
     }
@@ -962,9 +996,9 @@ impl Cpu {
         let destiny_value = registers.get_i64(register as usize)?;
         let new_value = destiny_value
             > (match value {
-            Value::Register(s) => registers.get_i64(s as usize)?,
-            Value::Constant(v) => v as i64,
-        });
+                Value::Register(s) => registers.get_i64(s as usize)?,
+                Value::Constant(v) => v as i64,
+            });
         registers.set_i64(register as usize, new_value as i64);
         Ok(())
     }
@@ -975,9 +1009,9 @@ impl Cpu {
         let destiny_value = registers.get_i64(register as usize)?;
         let new_value = destiny_value
             >= (match value {
-            Value::Register(s) => registers.get_i64(s as usize)?,
-            Value::Constant(v) => v as i64,
-        });
+                Value::Register(s) => registers.get_i64(s as usize)?,
+                Value::Constant(v) => v as i64,
+            });
         registers.set_i64(register as usize, new_value as i64);
         Ok(())
     }
@@ -988,10 +1022,10 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = (destiny_value
             - (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        }))
-            .abs()
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            }))
+        .abs()
             < EPSILON;
         registers.set_i64(register as usize, new_value as i64);
         Ok(())
@@ -1003,10 +1037,10 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = (destiny_value
             - (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        }))
-            .abs()
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            }))
+        .abs()
             >= EPSILON;
         registers.set_i64(register as usize, new_value as i64);
         Ok(())
@@ -1018,9 +1052,9 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = destiny_value
             < (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        });
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            });
         registers.set_f64(register as usize, new_value as i64 as f64);
         Ok(())
     }
@@ -1031,9 +1065,9 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = destiny_value
             <= (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        });
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            });
         registers.set_f64(register as usize, new_value as i64 as f64);
         Ok(())
     }
@@ -1044,9 +1078,9 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = destiny_value
             > (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        });
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            });
         registers.set_f64(register as usize, new_value as i64 as f64);
         Ok(())
     }
@@ -1057,9 +1091,9 @@ impl Cpu {
         let destiny_value = registers.get_f64(register as usize)?;
         let new_value = destiny_value
             >= (match value {
-            Value::Register(s) => registers.get_f64(s as usize)?,
-            Value::Constant(v) => v as f64,
-        });
+                Value::Register(s) => registers.get_f64(s as usize)?,
+                Value::Constant(v) => v as f64,
+            });
         registers.set_f64(register as usize, new_value as i64 as f64);
         Ok(())
     }
