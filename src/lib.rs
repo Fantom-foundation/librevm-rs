@@ -706,271 +706,51 @@ impl Cpu {
                     } as u32);
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::Lshr { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_u32(register as usize)?;
-                    let new_value = destiny_value.wrapping_shr(match value {
-                        Value::Register(s) => registers.get(s as usize)?,
-                        Value::Constant(v) => v,
-                    } as u32);
-                    registers.set_u32(register as usize, new_value);
-                }
-                Instruction::Ineg { register } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    registers.set(register as usize, !registers.get(register as usize)?)?;
-                }
-                Instruction::Fadd { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = destiny_value
-                        + (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        });
-                    registers.set_f64(register as usize, new_value);
-                }
-                Instruction::Fsub { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = destiny_value
-                        - (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        });
-                    registers.set_f64(register as usize, new_value);
-                }
-                Instruction::Fmul { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = destiny_value
-                        * (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        });
-                    registers.set_f64(register as usize, new_value);
-                }
-                Instruction::Frem { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = destiny_value.rem(match value {
-                        Value::Register(s) => registers.get_f64(s as usize)?,
-                        Value::Constant(v) => v as f64,
-                    });
-                    registers.set_f64(register as usize, new_value);
-                }
-                Instruction::Fdiv { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = destiny_value
-                        / (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        });
-                    registers.set_f64(register as usize, new_value);
-                }
-                Instruction::Eq { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value
-                        == (match value {
-                            Value::Register(s) => registers.get(s as usize)?,
-                            Value::Constant(v) => v,
-                        });
-                    registers.set(register as usize, new_value as u64)?;
-                }
-                Instruction::Ne { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value
-                        != (match value {
-                            Value::Register(s) => registers.get(s as usize)?,
-                            Value::Constant(v) => v,
-                        });
-                    registers.set(register as usize, new_value as u64)?;
-                }
-                Instruction::Ult { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value
-                        < (match value {
-                            Value::Register(s) => registers.get(s as usize)?,
-                            Value::Constant(v) => v,
-                        });
-                    registers.set(register as usize, new_value as u64)?;
-                }
-                Instruction::Ule { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value
-                        <= (match value {
-                            Value::Register(s) => registers.get(s as usize)?,
-                            Value::Constant(v) => v,
-                        });
-                    registers.set(register as usize, new_value as u64)?;
-                }
-                Instruction::Ugt { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value
-                        > (match value {
-                            Value::Register(s) => registers.get(s as usize)?,
-                            Value::Constant(v) => v,
-                        });
-                    registers.set(register as usize, new_value as u64)?;
-                }
-                Instruction::Uge { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value
-                        >= (match value {
-                            Value::Register(s) => registers.get(s as usize)?,
-                            Value::Constant(v) => v,
-                        });
-                    registers.set(register as usize, new_value as u64)?;
-                }
-                Instruction::Slt { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_i64(register as usize)?;
-                    let new_value = destiny_value
-                        < (match value {
-                            Value::Register(s) => registers.get_i64(s as usize)?,
-                            Value::Constant(v) => v as i64,
-                        });
-                    registers.set_i64(register as usize, new_value as i64);
-                }
-                Instruction::Sle { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_i64(register as usize)?;
-                    let new_value = destiny_value
-                        <= (match value {
-                            Value::Register(s) => registers.get_i64(s as usize)?,
-                            Value::Constant(v) => v as i64,
-                        });
-                    registers.set_i64(register as usize, new_value as i64);
-                }
-                Instruction::Sgt { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_i64(register as usize)?;
-                    let new_value = destiny_value
-                        > (match value {
-                            Value::Register(s) => registers.get_i64(s as usize)?,
-                            Value::Constant(v) => v as i64,
-                        });
-                    registers.set_i64(register as usize, new_value as i64);
-                }
+                Instruction::Lshr { register, value } => { self.lshr(register, value)?; }
+                Instruction::Ineg { register } => { self.ineg(register)?; }
+                Instruction::Fadd { register, value } => { self.fadd(register, value)?; }
+                Instruction::Fsub { register, value } => { self.fsub(register, value)?; }
+                Instruction::Fmul { register, value } => { self.fmul(register, value)?; }
+                Instruction::Frem { register, value } => { self.frem(register, value)?; }
+                Instruction::Fdiv { register, value } => { self.fdiv(register, value)?; }
+                Instruction::Eq { register, value } => { self.eq(register, value)?; }
+                Instruction::Ne { register, value } => { self.ne(register, value)?; }
+                Instruction::Ult { register, value } => { self.ult(register, value)?; }
+                Instruction::Ule { register, value } => { self.ule(register, value)?; }
+                Instruction::Ugt { register, value } => { self.ugt(register, value)?; }
+                Instruction::Uge { register, value } => { self.uge(register, value)?; }
+                Instruction::Slt { register, value } => { self.slt(register, value)?; }
+                Instruction::Sle { register, value } => { self.sle(register, value)?; }
+                Instruction::Sgt { register, value } => { self.sgt(register, value)?; }
                 Instruction::Sge { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_i64(register as usize)?;
-                    let new_value = destiny_value
-                        >= (match value {
-                            Value::Register(s) => registers.get_i64(s as usize)?,
-                            Value::Constant(v) => v as i64,
-                        });
-                    registers.set_i64(register as usize, new_value as i64);
+                    self.sge(register, value)?;
                 }
                 Instruction::Feq { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = (destiny_value
-                        - (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        }))
-                    .abs()
-                        < EPSILON;
-                    registers.set_i64(register as usize, new_value as i64);
+                    self.feq(register, value)?;
                 }
                 Instruction::Fne { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = (destiny_value
-                        - (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        }))
-                    .abs()
-                        >= EPSILON;
-                    registers.set_i64(register as usize, new_value as i64);
+                    self.fne(register, value)?;
                 }
                 Instruction::Flt { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = destiny_value
-                        < (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        });
-                    registers.set_f64(register as usize, new_value as i64 as f64);
+                    self.flt(register, value)?;
                 }
                 Instruction::Fle { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = destiny_value
-                        <= (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        });
-                    registers.set_f64(register as usize, new_value as i64 as f64);
+                    self.fle(register, value)?;
                 }
                 Instruction::Fgt { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = destiny_value
-                        > (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        });
-                    registers.set_f64(register as usize, new_value as i64 as f64);
+                    self.fgt(register, value)?;
                 }
                 Instruction::Fge { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_f64(register as usize)?;
-                    let new_value = destiny_value
-                        >= (match value {
-                            Value::Register(s) => registers.get_f64(s as usize)?,
-                            Value::Constant(v) => v as f64,
-                        });
-                    registers.set_f64(register as usize, new_value as i64 as f64);
+                    self.fge(register, value)?;
                 }
                 Instruction::Jmp { offset } => {
                     i = ((i as i64) + offset - 1) as usize;
                 }
                 Instruction::Jnz { offset, register } => {
-                    let rc = self.register_stack.borrow();
-                    let registers = rc.last().unwrap();
-                    if registers.get(register as usize)? != 0 {
-                        i = ((i as i64) + offset - 1) as usize;
-                    }
+                    self.jnz(&mut i, offset, register)?;
                 }
                 Instruction::Jz { offset, register } => {
-                    let rc = self.register_stack.borrow();
-                    let registers = rc.last().unwrap();
-                    if registers.get(register as usize)? == 0 {
-                        i = ((i as i64) + offset - 1) as usize;
-                    }
+                    self.jz(&mut i, offset, register)?;
                 }
                 Instruction::Call {
                     return_register,
@@ -981,18 +761,334 @@ impl Cpu {
                 Instruction::Ret { value } => {
                     self.return_from_function(&mut i, value)?;
                 }
-                Instruction::Leave => {
-                    self.register_stack.borrow_mut().pop();
-                    let (new_i, _) = self
-                        .call_stack
-                        .pop()
-                        .ok_or(RuntimeError::ReturnOnNoFunction)?;
-                    i = new_i;
-                }
+                Instruction::Leave => { self.leave(&mut i)?; }
                 _ => panic!("Not implemented yet"),
             }
             i += 1;
         }
+        Ok(())
+    }
+
+    fn lshr(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_u32(register as usize)?;
+        let new_value = destiny_value.wrapping_shr(match value {
+            Value::Register(s) => registers.get(s as usize)?,
+            Value::Constant(v) => v,
+        } as u32);
+        registers.set_u32(register as usize, new_value);
+        Ok(())
+    }
+
+    fn ineg(&mut self, register: u8) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        registers.set(register as usize, !registers.get(register as usize)?)?;
+        Ok(())
+    }
+
+    fn fadd(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = destiny_value
+            + (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        });
+        registers.set_f64(register as usize, new_value);
+        Ok(())
+    }
+
+    fn fsub(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = destiny_value
+            - (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        });
+        registers.set_f64(register as usize, new_value);
+        Ok(())
+    }
+
+    fn fmul(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = destiny_value
+            * (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        });
+        registers.set_f64(register as usize, new_value);
+        Ok(())
+    }
+
+    fn frem(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = destiny_value.rem(match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        });
+        registers.set_f64(register as usize, new_value);
+        Ok(())
+    }
+
+    fn fdiv(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = destiny_value
+            / (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        });
+        registers.set_f64(register as usize, new_value);
+        Ok(())
+    }
+
+    fn eq(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get(register as usize)?;
+        let new_value = destiny_value
+            == (match value {
+            Value::Register(s) => registers.get(s as usize)?,
+            Value::Constant(v) => v,
+        });
+        registers.set(register as usize, new_value as u64)?;
+        Ok(())
+    }
+
+    fn ne(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get(register as usize)?;
+        let new_value = destiny_value
+            != (match value {
+            Value::Register(s) => registers.get(s as usize)?,
+            Value::Constant(v) => v,
+        });
+        registers.set(register as usize, new_value as u64)?;
+        Ok(())
+    }
+
+    fn ult(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get(register as usize)?;
+        let new_value = destiny_value
+            < (match value {
+            Value::Register(s) => registers.get(s as usize)?,
+            Value::Constant(v) => v,
+        });
+        registers.set(register as usize, new_value as u64)?;
+        Ok(())
+    }
+
+    fn ule(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get(register as usize)?;
+        let new_value = destiny_value
+            <= (match value {
+            Value::Register(s) => registers.get(s as usize)?,
+            Value::Constant(v) => v,
+        });
+        registers.set(register as usize, new_value as u64)?;
+        Ok(())
+    }
+
+    fn ugt(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get(register as usize)?;
+        let new_value = destiny_value
+            > (match value {
+            Value::Register(s) => registers.get(s as usize)?,
+            Value::Constant(v) => v,
+        });
+        registers.set(register as usize, new_value as u64)?;
+        Ok(())
+    }
+
+    fn uge(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get(register as usize)?;
+        let new_value = destiny_value
+            >= (match value {
+            Value::Register(s) => registers.get(s as usize)?,
+            Value::Constant(v) => v,
+        });
+        registers.set(register as usize, new_value as u64)?;
+        Ok(())
+    }
+
+    fn slt(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_i64(register as usize)?;
+        let new_value = destiny_value
+            < (match value {
+            Value::Register(s) => registers.get_i64(s as usize)?,
+            Value::Constant(v) => v as i64,
+        });
+        registers.set_i64(register as usize, new_value as i64);
+        Ok(())
+    }
+
+    fn sle(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_i64(register as usize)?;
+        let new_value = destiny_value
+            <= (match value {
+            Value::Register(s) => registers.get_i64(s as usize)?,
+            Value::Constant(v) => v as i64,
+        });
+        registers.set_i64(register as usize, new_value as i64);
+        Ok(())
+    }
+
+    fn sgt(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_i64(register as usize)?;
+        let new_value = destiny_value
+            > (match value {
+            Value::Register(s) => registers.get_i64(s as usize)?,
+            Value::Constant(v) => v as i64,
+        });
+        registers.set_i64(register as usize, new_value as i64);
+        Ok(())
+    }
+
+    fn sge(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_i64(register as usize)?;
+        let new_value = destiny_value
+            >= (match value {
+            Value::Register(s) => registers.get_i64(s as usize)?,
+            Value::Constant(v) => v as i64,
+        });
+        registers.set_i64(register as usize, new_value as i64);
+        Ok(())
+    }
+
+    fn feq(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = (destiny_value
+            - (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        }))
+            .abs()
+            < EPSILON;
+        registers.set_i64(register as usize, new_value as i64);
+        Ok(())
+    }
+
+    fn fne(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = (destiny_value
+            - (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        }))
+            .abs()
+            >= EPSILON;
+        registers.set_i64(register as usize, new_value as i64);
+        Ok(())
+    }
+
+    fn flt(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = destiny_value
+            < (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        });
+        registers.set_f64(register as usize, new_value as i64 as f64);
+        Ok(())
+    }
+
+    fn fle(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = destiny_value
+            <= (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        });
+        registers.set_f64(register as usize, new_value as i64 as f64);
+        Ok(())
+    }
+
+    fn fgt(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = destiny_value
+            > (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        });
+        registers.set_f64(register as usize, new_value as i64 as f64);
+        Ok(())
+    }
+
+    fn fge(&mut self, register: u8, value: Value) -> Result<(), Error> {
+        let mut rc = self.register_stack.borrow_mut();
+        let registers = rc.last_mut().unwrap();
+        let destiny_value = registers.get_f64(register as usize)?;
+        let new_value = destiny_value
+            >= (match value {
+            Value::Register(s) => registers.get_f64(s as usize)?,
+            Value::Constant(v) => v as f64,
+        });
+        registers.set_f64(register as usize, new_value as i64 as f64);
+        Ok(())
+    }
+
+    fn jnz(&mut self, i: &mut usize, offset: i64, register: u8) -> Result<(), Error> {
+        let rc = self.register_stack.borrow();
+        let registers = rc.last().unwrap();
+        if registers.get(register as usize)? != 0 {
+            *i = ((*i as i64) + offset - 1) as usize;
+        }
+        Ok(())
+    }
+
+    fn jz(&mut self, i: &mut usize, offset: i64, register: u8) -> Result<(), Error> {
+        let rc = self.register_stack.borrow();
+        let registers = rc.last().unwrap();
+        if registers.get(register as usize)? == 0 {
+            *i = ((*i as i64) + offset - 1) as usize;
+        }
+        Ok(())
+    }
+
+    fn leave(&mut self, i: &mut usize) -> Result<(), Error> {
+        self.register_stack.borrow_mut().pop();
+        let (new_i, _) = self
+            .call_stack
+            .pop()
+            .ok_or(RuntimeError::ReturnOnNoFunction)?;
+        *i = new_i;
         Ok(())
     }
 
