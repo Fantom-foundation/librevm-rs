@@ -77,8 +77,6 @@ or
 */
 #[macro_use]
 extern crate failure;
-#[macro_use]
-extern crate runtime_fmt;
 use crate::allocator::Allocator;
 use crate::error::RuntimeError;
 use crate::instruction::{Instruction, Program, Value};
@@ -137,63 +135,68 @@ impl NativeFunctions {
         let r = match args.len() {
             1 => {
                 let content = registers.to_string(args[0] as usize)?;
-                rt_println!(content).unwrap();
+                println!("content: {}", content);
                 Ok(0)
             }
             2 => {
                 let content = registers.to_string(args[0] as usize)?;
-                rt_println!(content, registers.to_string(args[1] as usize)?).unwrap();
+                println!(
+                    "content: {}, registers: {}",
+                    content,
+                    registers.to_string(args[1] as usize)?
+                );
                 Ok(0)
             }
             3 => {
                 let content = registers.to_string(args[0] as usize)?;
-                rt_println!(
+                println!(
+                    "content: {}, registers[1]: {}, registers[2]: {}",
                     content,
                     registers.to_string(args[1] as usize)?,
                     registers.to_string(args[2] as usize)?,
-                )
-                .unwrap();
+                );
                 Ok(0)
             }
             4 => {
                 let content = registers.to_string(args[0] as usize)?;
-                rt_println!(
+                println!(
+                    "content: {}, registers[1]: {}, registers[2]: {}, registers[3]: {}",
                     content,
                     registers.to_string(args[1] as usize)?,
                     registers.to_string(args[2] as usize)?,
                     registers.to_string(args[3] as usize)?,
-                )
-                .unwrap();
+                );
                 Ok(0)
             }
             5 => {
                 let content = registers.to_string(args[0] as usize)?;
-                rt_println!(
+                println!(
+                    "content: {}, registers[1]: {}, registers[2]: {}, registers[3]: {}, registers[4]: {}",
                     content,
                     registers.to_string(args[1] as usize)?,
                     registers.to_string(args[2] as usize)?,
                     registers.to_string(args[3] as usize)?,
                     registers.to_string(args[4] as usize)?,
-                )
-                .unwrap();
+                );
                 Ok(0)
             }
             6 => {
                 let content = registers.to_string(args[0] as usize)?;
-                rt_println!(
+                println!(
+                    "content: {}, registers[1]: {}, registers[2]: {}, registers[3]: {}, registers[4]: {}, registers[5]: {}",
                     content,
                     registers.to_string(args[1] as usize)?,
                     registers.to_string(args[2] as usize)?,
                     registers.to_string(args[3] as usize)?,
                     registers.to_string(args[4] as usize)?,
                     registers.to_string(args[5] as usize)?,
-                )
-                .unwrap();
+                );
                 Ok(0)
             }
             7 => {
                 let content = registers.to_string(args[0] as usize)?;
-                rt_println!(
+                println!(
+                    "content: {}, registers[1]: {}, registers[2]: {}, registers[3]: {}, registers[4]: {}, registers[5]: {}, registers[6]: {}",
                     content,
                     registers.to_string(args[1] as usize)?,
                     registers.to_string(args[2] as usize)?,
@@ -201,13 +204,13 @@ impl NativeFunctions {
                     registers.to_string(args[4] as usize)?,
                     registers.to_string(args[5] as usize)?,
                     registers.to_string(args[6] as usize)?,
-                )
-                .unwrap();
+                );
                 Ok(0)
             }
             8 => {
                 let content = registers.to_string(args[0] as usize)?;
-                rt_println!(
+                println!(
+                    "content: {}, registers[1]: {}, registers[2]: {}, registers[3]: {}, registers[4]: {}, registers[5]: {}, registers[6]: {}, registers[7]: {}",
                     content,
                     registers.to_string(args[1] as usize)?,
                     registers.to_string(args[2] as usize)?,
@@ -216,8 +219,7 @@ impl NativeFunctions {
                     registers.to_string(args[5] as usize)?,
                     registers.to_string(args[6] as usize)?,
                     registers.to_string(args[7] as usize)?,
-                )
-                .unwrap();
+                );
                 Ok(0)
             }
             n => Err(RuntimeError::WrongArgumentsNumber {
