@@ -2,9 +2,10 @@ use crate::error::ParsingError;
 use failure::Error;
 use std::convert::TryFrom;
 
+#[derive(Clone, Debug)]
 pub struct Program(pub Vec<Instruction>);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Instruction {
     Fd {
         name: String,
@@ -370,7 +371,7 @@ impl Instruction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Constant(u64),
     Register(u8),
