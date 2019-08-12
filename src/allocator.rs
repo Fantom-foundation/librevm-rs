@@ -32,7 +32,7 @@ impl FreeChunks {
             .free_chunks
             .binary_search_by(|(f, t)| (item.1 - item.0).cmp(&(t - f)))
         {
-            Ok(_) => Err(AllocatorError::AddressAlreadyFreed { address: item.0 })?,
+            Ok(_) => return Err(AllocatorError::AddressAlreadyFreed { address: item.0 }.into()),
             Err(pos) => {
                 self.free_chunks.insert(pos, item);
             }
