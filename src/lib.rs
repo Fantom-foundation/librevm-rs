@@ -99,7 +99,7 @@ pub mod instruction;
 mod memory;
 mod register_set;
 
-type CpuFn = Box<Fn(&NativeFunctions, Vec<u8>) -> Result<u64, Error>>;
+type CpuFn = Box<dyn Fn(&NativeFunctions, Vec<u8>) -> Result<u64, Error>>;
 #[repr(C)]
 enum Function {
     Native(CpuFn),
@@ -114,11 +114,12 @@ struct NativeFunctions {
 impl NativeFunctions {
     fn puts(&self, args: Vec<u8>) -> Result<u64, Error> {
         if args.len() != 1 {
-            Err(RuntimeError::WrongArgumentsNumber {
+            return Err(RuntimeError::WrongArgumentsNumber {
                 name: "puts".to_owned(),
                 expected: 1,
                 got: args.len(),
-            })?;
+            }
+            .into());
         }
         self.register_stack
             .borrow()
@@ -319,11 +320,12 @@ impl NativeFunctions {
 
     fn exit(&self, args: Vec<u8>) -> Result<u64, Error> {
         if args.len() != 1 {
-            Err(RuntimeError::WrongArgumentsNumber {
+            return Err(RuntimeError::WrongArgumentsNumber {
                 name: "exit".to_owned(),
                 expected: 1,
                 got: args.len(),
-            })?;
+            }
+            .into());
         }
         Err(RuntimeError::ProgramEnded {
             errno: self.register_stack.borrow().last().unwrap().get(0)?,
@@ -333,11 +335,12 @@ impl NativeFunctions {
 
     fn malloc(&self, args: Vec<u8>) -> Result<u64, Error> {
         if args.len() != 1 {
-            Err(RuntimeError::WrongArgumentsNumber {
+            return Err(RuntimeError::WrongArgumentsNumber {
                 name: "malloc".to_owned(),
                 expected: 1,
                 got: args.len(),
-            })?;
+            }
+            .into());
         }
         let size = self.register_stack.borrow().last().unwrap().get(0)? as usize;
         self.allocator.borrow_mut().malloc(size).map(|v| v as u64)
@@ -345,11 +348,12 @@ impl NativeFunctions {
 
     fn free(&self, args: Vec<u8>) -> Result<u64, Error> {
         if args.len() != 1 {
-            Err(RuntimeError::WrongArgumentsNumber {
+            return Err(RuntimeError::WrongArgumentsNumber {
                 name: "free".to_owned(),
                 expected: 1,
                 got: args.len(),
-            })?;
+            }
+            .into());
         }
         let address = self.register_stack.borrow().last().unwrap().get(0)? as usize;
         self.allocator.borrow_mut().free(address).map(|_| 0)

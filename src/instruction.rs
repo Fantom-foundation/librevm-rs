@@ -285,14 +285,17 @@ macro_rules! parse_instruction_with_string_and_register {
 }
 
 impl Instruction {
-    fn parse_fd(stream: &mut Iterator<Item = u8>) -> Result<Instruction, Error> {
+    fn parse_fd(stream: &mut dyn Iterator<Item = u8>) -> Result<Instruction, Error> {
         let name = Instruction::parse_string(stream)?;
         let args = Instruction::parse_u64(stream)?;
         let skip = Instruction::parse_u64(stream)?;
         Ok(Instruction::Fd { name, args, skip })
     }
 
-    fn parse_call(stream: &mut Iterator<Item = u8>, nargs: usize) -> Result<Instruction, Error> {
+    fn parse_call(
+        stream: &mut dyn Iterator<Item = u8>,
+        nargs: usize,
+    ) -> Result<Instruction, Error> {
         let return_register = Instruction::parse_register(stream)?;
         let mut arguments = [None; 8];
         for i in arguments.iter_mut().take(nargs - 1) {
@@ -304,17 +307,17 @@ impl Instruction {
         })
     }
 
-    fn parse_string(stream: &mut Iterator<Item = u8>) -> Result<String, Error> {
+    fn parse_string(stream: &mut dyn Iterator<Item = u8>) -> Result<String, Error> {
         let string_length = stream.next().ok_or(ParsingError::StringWithoutLenght)? as usize;
         let string_bytes: Vec<u8> = stream.take(string_length).collect();
         let name = String::from_utf8(string_bytes)?;
         Ok(name)
     }
 
-    fn parse_u16(stream: &mut Iterator<Item = u8>) -> Result<u16, Error> {
+    fn parse_u16(stream: &mut dyn Iterator<Item = u8>) -> Result<u16, Error> {
         let bytes: Vec<u8> = stream.take(2).collect();
         if bytes.len() != 2 {
-            Err(ParsingError::UnexpectedEndOfStream)?;
+            return Err(ParsingError::UnexpectedEndOfStream.into());
         }
         #[allow(clippy::transmute_ptr_to_ptr)]
         let byte_pairs: &[u16] =
@@ -322,10 +325,10 @@ impl Instruction {
         Ok(byte_pairs[0])
     }
 
-    fn parse_u32(stream: &mut Iterator<Item = u8>) -> Result<u32, Error> {
+    fn parse_u32(stream: &mut dyn Iterator<Item = u8>) -> Result<u32, Error> {
         let bytes: Vec<u8> = stream.take(4).collect();
         if bytes.len() != 4 {
-            Err(ParsingError::UnexpectedEndOfStream)?;
+            return Err(ParsingError::UnexpectedEndOfStream.into());
         }
         #[allow(clippy::transmute_ptr_to_ptr)]
         let byte_pairs: &[u32] =
@@ -333,10 +336,10 @@ impl Instruction {
         Ok(byte_pairs[0])
     }
 
-    fn parse_i64(stream: &mut Iterator<Item = u8>) -> Result<i64, Error> {
+    fn parse_i64(stream: &mut dyn Iterator<Item = u8>) -> Result<i64, Error> {
         let bytes: Vec<u8> = stream.take(8).collect();
         if bytes.len() != 8 {
-            Err(ParsingError::U64LacksInformation)?;
+            return Err(ParsingError::U64LacksInformation.into());
         }
         #[allow(clippy::transmute_ptr_to_ptr)]
         let byte_groups: &[i64] =
@@ -344,10 +347,10 @@ impl Instruction {
         Ok(byte_groups[0])
     }
 
-    fn parse_u64(stream: &mut Iterator<Item = u8>) -> Result<u64, Error> {
+    fn parse_u64(stream: &mut dyn Iterator<Item = u8>) -> Result<u64, Error> {
         let bytes: Vec<u8> = stream.take(8).collect();
         if bytes.len() != 8 {
-            Err(ParsingError::U64LacksInformation)?;
+            return Err(ParsingError::U64LacksInformation.into());
         }
         #[allow(clippy::transmute_ptr_to_ptr)]
         let byte_groups: &[u64] =
@@ -355,13 +358,13 @@ impl Instruction {
         Ok(byte_groups[0])
     }
 
-    fn parse_register(stream: &mut Iterator<Item = u8>) -> Result<u8, Error> {
+    fn parse_register(stream: &mut dyn Iterator<Item = u8>) -> Result<u8, Error> {
         Ok(stream
             .next()
             .ok_or(ParsingError::RegisterExpectedNothingFound)?)
     }
 
-    fn parse_value(stream: &mut Iterator<Item = u8>) -> Result<Value, Error> {
+    fn parse_value(stream: &mut dyn Iterator<Item = u8>) -> Result<Value, Error> {
         let flag = stream.next().ok_or(ParsingError::ValueWithNoFlag)?;
         if flag == 0 {
             Instruction::parse_register(stream).map(Value::Register)
