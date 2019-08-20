@@ -3,10 +3,10 @@ use failure::Error;
 use std::convert::TryFrom;
 
 #[derive(Clone, Debug)]
-pub struct Program(pub Vec<Instruction>);
+pub struct Program(pub Vec<RevmInstruction>);
 
 #[derive(Clone, Debug)]
-pub enum Instruction {
+pub enum RevmInstruction {
     Fd {
         name: String,
         args: u64,
@@ -242,66 +242,66 @@ pub enum Instruction {
 
 macro_rules! parse_instruction_with_register_and_offset {
     ($instr: ident, $stream: expr) => {
-        Instruction::$instr {
-            offset: Instruction::parse_i64($stream)?,
-            register: Instruction::parse_register($stream)?,
+        RevmInstruction::$instr {
+            offset: RevmInstruction::parse_i64($stream)?,
+            register: RevmInstruction::parse_register($stream)?,
         }
     };
 }
 
 macro_rules! parse_instruction_with_register {
     ($instr: ident, $stream: expr) => {
-        Instruction::$instr {
-            register: Instruction::parse_register($stream)?,
+        RevmInstruction::$instr {
+            register: RevmInstruction::parse_register($stream)?,
         }
     };
 }
 
 macro_rules! parse_instruction_from_register_to_register {
     ($instr: ident, $stream: expr) => {
-        Instruction::$instr {
-            source: Instruction::parse_register($stream)?,
-            destiny: Instruction::parse_register($stream)?,
+        RevmInstruction::$instr {
+            source: RevmInstruction::parse_register($stream)?,
+            destiny: RevmInstruction::parse_register($stream)?,
         }
     };
 }
 
 macro_rules! parse_instruction_from_register_to_value {
     ($instr: ident, $stream: expr) => {
-        Instruction::$instr {
-            value: Instruction::parse_value($stream)?,
-            register: Instruction::parse_register($stream)?,
+        RevmInstruction::$instr {
+            value: RevmInstruction::parse_value($stream)?,
+            register: RevmInstruction::parse_register($stream)?,
         }
     };
 }
 
 macro_rules! parse_instruction_with_string_and_register {
     ($instr: ident, $stream: expr) => {
-        Instruction::$instr {
-            string: Instruction::parse_string($stream)?,
-            register: Instruction::parse_register($stream)?,
+        RevmInstruction::$instr {
+            string: RevmInstruction::parse_string($stream)?,
+            register: RevmInstruction::parse_register($stream)?,
         }
     };
 }
 
-impl Instruction {
-    fn parse_fd(stream: &mut dyn Iterator<Item = u8>) -> Result<Instruction, Error> {
-        let name = Instruction::parse_string(stream)?;
-        let args = Instruction::parse_u64(stream)?;
-        let skip = Instruction::parse_u64(stream)?;
-        Ok(Instruction::Fd { name, args, skip })
+impl RevmInstruction {
+    fn parse_fd(stream: &mut dyn Iterator<Item = u8>) -> Result<RevmInstruction, Error> {
+        let name = RevmInstruction::parse_string(stream)?;
+        let args = RevmInstruction::parse_u64(stream)?;
+        let skip = RevmInstruction::parse_u64(stream)?;
+        Ok(RevmInstruction::Fd { name, args, skip })
     }
 
     fn parse_call(
         stream: &mut dyn Iterator<Item = u8>,
         nargs: usize,
-    ) -> Result<Instruction, Error> {
-        let return_register = Instruction::parse_register(stream)?;
+    ) -> Result<RevmInstruction, Error> {
+        let return_register = RevmInstruction::parse_register(stream)?;
         let mut arguments = [None; 8];
         for i in arguments.iter_mut().take(nargs - 1) {
-            *i = Some(Instruction::parse_register(stream)?);
+            *i = Some(RevmInstruction::parse_register(stream)?);
         }
-        Ok(Instruction::Call {
+        Ok(RevmInstruction::Call {
             arguments,
             return_register,
         })
@@ -367,9 +367,9 @@ impl Instruction {
     fn parse_value(stream: &mut dyn Iterator<Item = u8>) -> Result<Value, Error> {
         let flag = stream.next().ok_or(ParsingError::ValueWithNoFlag)?;
         if flag == 0 {
-            Instruction::parse_register(stream).map(Value::Register)
+            RevmInstruction::parse_register(stream).map(Value::Register)
         } else {
-            Instruction::parse_u64(stream).map(Value::Constant)
+            RevmInstruction::parse_u64(stream).map(Value::Constant)
         }
     }
 }
@@ -389,7 +389,7 @@ impl TryFrom<Vec<u8>> for Program {
         while next.is_some() {
             let byte = next.expect("can't happen");
             let instruction = match byte {
-                0x00 => Instruction::parse_fd(&mut source),
+                0x00 => RevmInstruction::parse_fd(&mut source),
                 0x01 => Ok(parse_instruction_from_register_to_value!(Mov, &mut source)),
                 0x02 => Ok(parse_instruction_with_string_and_register!(Gg, &mut source)),
                 0x03 => Ok(parse_instruction_with_string_and_register!(Sg, &mut source)),
@@ -400,33 +400,33 @@ impl TryFrom<Vec<u8>> for Program {
                 0x05 => {
                     let content = source.next().ok_or(ParsingError::UnexpectedEndOfStream)?;
                     let value = Value::Constant(u64::from(content));
-                    Ok(Instruction::Ld8 {
+                    Ok(RevmInstruction::Ld8 {
                         value,
-                        register: Instruction::parse_register(&mut source)?,
+                        register: RevmInstruction::parse_register(&mut source)?,
                     })
                 }
                 0x06 => {
-                    let content = Instruction::parse_u16(&mut source)?;
+                    let content = RevmInstruction::parse_u16(&mut source)?;
                     let value = Value::Constant(u64::from(content));
-                    Ok(Instruction::Ld16 {
+                    Ok(RevmInstruction::Ld16 {
                         value,
-                        register: Instruction::parse_register(&mut source)?,
+                        register: RevmInstruction::parse_register(&mut source)?,
                     })
                 }
                 0x07 => {
-                    let content = Instruction::parse_u32(&mut source)?;
+                    let content = RevmInstruction::parse_u32(&mut source)?;
                     let value = Value::Constant(u64::from(content));
-                    Ok(Instruction::Ld32 {
+                    Ok(RevmInstruction::Ld32 {
                         value,
-                        register: Instruction::parse_register(&mut source)?,
+                        register: RevmInstruction::parse_register(&mut source)?,
                     })
                 }
                 0x08 => {
-                    let content = Instruction::parse_u64(&mut source)?;
+                    let content = RevmInstruction::parse_u64(&mut source)?;
                     let value = Value::Constant(content as u64);
-                    Ok(Instruction::Ld64 {
+                    Ok(RevmInstruction::Ld64 {
                         value,
-                        register: Instruction::parse_register(&mut source)?,
+                        register: RevmInstruction::parse_register(&mut source)?,
                     })
                 }
                 0x09 => Ok(parse_instruction_from_register_to_value!(St8, &mut source)),
@@ -473,27 +473,27 @@ impl TryFrom<Vec<u8>> for Program {
                 0x2f => Ok(parse_instruction_from_register_to_value!(Fle, &mut source)),
                 0x30 => Ok(parse_instruction_from_register_to_value!(Fgt, &mut source)),
                 0x31 => Ok(parse_instruction_from_register_to_value!(Fge, &mut source)),
-                0x32 => Ok(Instruction::Jmp {
-                    offset: Instruction::parse_i64(&mut source)?,
+                0x32 => Ok(RevmInstruction::Jmp {
+                    offset: RevmInstruction::parse_i64(&mut source)?,
                 }),
                 0x33 => Ok(parse_instruction_with_register_and_offset!(
                     Jnz,
                     &mut source
                 )),
                 0x34 => Ok(parse_instruction_with_register_and_offset!(Jz, &mut source)),
-                0x35 => Instruction::parse_call(&mut source, 0),
-                0x36 => Instruction::parse_call(&mut source, 1),
-                0x37 => Instruction::parse_call(&mut source, 2),
-                0x38 => Instruction::parse_call(&mut source, 3),
-                0x39 => Instruction::parse_call(&mut source, 4),
-                0x3a => Instruction::parse_call(&mut source, 5),
-                0x3b => Instruction::parse_call(&mut source, 6),
-                0x3c => Instruction::parse_call(&mut source, 7),
-                0x3d => Instruction::parse_call(&mut source, 8),
-                0x3e => Ok(Instruction::Ret {
-                    value: Instruction::parse_value(&mut source)?,
+                0x35 => RevmInstruction::parse_call(&mut source, 0),
+                0x36 => RevmInstruction::parse_call(&mut source, 1),
+                0x37 => RevmInstruction::parse_call(&mut source, 2),
+                0x38 => RevmInstruction::parse_call(&mut source, 3),
+                0x39 => RevmInstruction::parse_call(&mut source, 4),
+                0x3a => RevmInstruction::parse_call(&mut source, 5),
+                0x3b => RevmInstruction::parse_call(&mut source, 6),
+                0x3c => RevmInstruction::parse_call(&mut source, 7),
+                0x3d => RevmInstruction::parse_call(&mut source, 8),
+                0x3e => Ok(RevmInstruction::Ret {
+                    value: RevmInstruction::parse_value(&mut source)?,
                 }),
-                0x3f => Ok(Instruction::Leave),
+                0x3f => Ok(RevmInstruction::Leave),
                 0x40 => Ok(parse_instruction_from_register_to_register!(
                     CssDyn,
                     &mut source

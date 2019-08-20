@@ -81,10 +81,10 @@ extern crate failure;
 extern crate runtime_fmt;
 use crate::allocator::Allocator;
 use crate::error::RuntimeError;
-use crate::instruction::{Instruction, Program, Value};
+use crate::instruction::{RevmInstruction, Program, Value};
 use crate::memory::Memory;
 use crate::register_set::RegisterSet;
-use failure::Error;
+use failure::{Error, Fail};
 //use libc::scanf;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -360,7 +360,45 @@ impl NativeFunctions {
     }
 }
 
-pub struct Cpu {
+pub trait MemoryAddressWidth {}
+
+impl MemoryAddressWidth for u8 {}
+impl MemoryAddressWidth for u16 {}
+impl MemoryAddressWidth for u32 {}
+impl MemoryAddressWidth for u64 {}
+
+pub trait Instruction {
+    fn size(&self) -> Result<u8, Error>;
+    fn get_cycles(&self) -> Result<usize, Error>;
+}
+
+pub trait Cpu<W, I, F>
+    where
+        W: MemoryAddressWidth + Clone,
+        I: Instruction + ToString + From<Vec<W>>,
+        F: Fail, {
+    fn execute(&mut self) -> Result<usize, Error> {
+        let instruction = I::from(self.get_next_instruction_bytes());
+        if !self.can_run(&instruction) {
+            return Ok(0);
+        }
+        self.increase_pc(instruction.size()?);
+        self.execute_instruction(&instruction)?;
+        let cycles = self.get_cycles_for_instruction(&instruction)?;
+        Ok(cycles)
+    }
+    fn get_cycles_for_instruction(&mut self, instruction: &I) -> Result<usize, Error> {
+        instruction.get_cycles()
+    }
+    fn execute_instruction(&mut self, instruction: &I) -> Result<(), Error>;
+    fn get_pc(&self) -> u16;
+    fn get_next_instruction_bytes(&self) -> Vec<W>;
+    fn can_run(&self, instruction: &I) -> bool;
+    fn is_done(&self) -> bool;
+    fn increase_pc(&mut self, steps: u8);
+}
+
+pub struct CpuRevm {
     allocator: Rc<RefCell<Allocator>>,
     call_stack: Vec<(usize, u8)>,
     pub(crate) functions: HashMap<String, Function>,
@@ -369,8 +407,8 @@ pub struct Cpu {
     register_stack: Rc<RefCell<Vec<RegisterSet>>>,
 }
 
-impl Cpu {
-    pub fn new(capacity: usize) -> Result<Cpu, Error> {
+impl CpuRevm {
+    pub fn new(capacity: usize) -> Result<CpuRevm, Error> {
         let memory = Memory::new(capacity);
         let allocator = Rc::new(RefCell::new(Allocator::new(capacity)));
         let register_stack = Rc::new(RefCell::new(vec![]));
@@ -402,7 +440,7 @@ impl Cpu {
             "free".to_owned(),
             Function::Native(Box::new(NativeFunctions::free)),
         );
-        let mut cpu = Cpu {
+        let mut cpu = CpuRevm {
             allocator,
             functions,
             memory,
@@ -438,13 +476,13 @@ impl Cpu {
         while i < program.0.len() {
             let instruction = program.0[i].clone();
             match instruction {
-                Instruction::Fd { name, args, skip } => {
+                RevmInstruction::Fd { name, args, skip } => {
                     self.functions
                         .insert(name.clone(), Function::UserDefined(i, args, skip));
                     i += skip as usize;
                 }
-                Instruction::Mov { register, value } => self.value_to_register(register, value)?,
-                Instruction::Gg { string, register } => {
+                RevmInstruction::Mov { register, value } => self.value_to_register(register, value)?,
+                RevmInstruction::Gg { string, register } => {
                     let value = *self
                         .globals
                         .get(&string)
@@ -455,13 +493,13 @@ impl Cpu {
                     let registers = rc.last_mut().unwrap();
                     registers.set(register as usize, value)?;
                 }
-                Instruction::Sg { string, register } => {
+                RevmInstruction::Sg { string, register } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let value = registers.get(register as usize)?;
                     self.globals.insert(string, value);
                 }
-                Instruction::Css { string, register } => {
+                RevmInstruction::Css { string, register } => {
                     let string_size = (string.len() as f64 / 8f64).ceil() as usize;
                     let address = self.allocator.borrow_mut().malloc(string_size)?;
                     self.memory.copy_u8_vector(string.as_bytes(), address);
@@ -469,7 +507,7 @@ impl Cpu {
                     let registers = rc.last_mut().unwrap();
                     registers.set(register as usize, address as u64)?;
                 }
-                Instruction::Ld8 { register, value } => {
+                RevmInstruction::Ld8 { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     registers.set(
@@ -482,7 +520,7 @@ impl Cpu {
                         },
                     )?;
                 }
-                Instruction::Ld16 { register, value } => {
+                RevmInstruction::Ld16 { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     registers.set(
@@ -495,7 +533,7 @@ impl Cpu {
                         },
                     )?;
                 }
-                Instruction::Ld32 { register, value } => {
+                RevmInstruction::Ld32 { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     registers.set(
@@ -508,7 +546,7 @@ impl Cpu {
                         },
                     )?;
                 }
-                Instruction::Ld64 { register, value } => {
+                RevmInstruction::Ld64 { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     registers.set(
@@ -519,7 +557,7 @@ impl Cpu {
                         },
                     )?;
                 }
-                Instruction::St8 {
+                RevmInstruction::St8 {
                     register,
                     value: address_value,
                 } => {
@@ -532,7 +570,7 @@ impl Cpu {
                     };
                     self.memory.copy_u8(value, address);
                 }
-                Instruction::St16 {
+                RevmInstruction::St16 {
                     register,
                     value: address_value,
                 } => {
@@ -545,7 +583,7 @@ impl Cpu {
                     };
                     self.memory.copy_u16(value, address);
                 }
-                Instruction::St32 {
+                RevmInstruction::St32 {
                     register,
                     value: address_value,
                 } => {
@@ -558,7 +596,7 @@ impl Cpu {
                     };
                     self.memory.copy_u32(value, address);
                 }
-                Instruction::St64 {
+                RevmInstruction::St64 {
                     register,
                     value: address_value,
                 } => {
@@ -571,13 +609,13 @@ impl Cpu {
                     };
                     self.memory.copy_u64(value, address);
                 }
-                Instruction::Lea { destiny, source } => {
+                RevmInstruction::Lea { destiny, source } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let effective_address = registers.address + source as usize;
                     registers.set(destiny as usize, effective_address as u64)?;
                 }
-                Instruction::Iadd { register, value } => {
+                RevmInstruction::Iadd { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get_i64(register as usize)?;
@@ -587,7 +625,7 @@ impl Cpu {
                     });
                     registers.set_i64(register as usize, new_value);
                 }
-                Instruction::Isub { register, value } => {
+                RevmInstruction::Isub { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get_i64(register as usize)?;
@@ -597,7 +635,7 @@ impl Cpu {
                     });
                     registers.set_i64(register as usize, new_value);
                 }
-                Instruction::Smul { register, value } => {
+                RevmInstruction::Smul { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get_i64(register as usize)?;
@@ -607,7 +645,7 @@ impl Cpu {
                     });
                     registers.set_i64(register as usize, new_value);
                 }
-                Instruction::Umul { register, value } => {
+                RevmInstruction::Umul { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get(register as usize)?;
@@ -617,7 +655,7 @@ impl Cpu {
                     });
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::Srem { register, value } => {
+                RevmInstruction::Srem { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get_i64(register as usize)?;
@@ -627,7 +665,7 @@ impl Cpu {
                     });
                     registers.set_i64(register as usize, new_value);
                 }
-                Instruction::Urem { register, value } => {
+                RevmInstruction::Urem { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get(register as usize)?;
@@ -637,7 +675,7 @@ impl Cpu {
                     });
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::Sdiv { register, value } => {
+                RevmInstruction::Sdiv { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get_i64(register as usize)?;
@@ -647,7 +685,7 @@ impl Cpu {
                     });
                     registers.set_i64(register as usize, new_value);
                 }
-                Instruction::Udiv { register, value } => {
+                RevmInstruction::Udiv { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get(register as usize)?;
@@ -657,7 +695,7 @@ impl Cpu {
                     });
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::And { register, value } => {
+                RevmInstruction::And { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get(register as usize)?;
@@ -668,7 +706,7 @@ impl Cpu {
                         });
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::Or { register, value } => {
+                RevmInstruction::Or { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get(register as usize)?;
@@ -679,7 +717,7 @@ impl Cpu {
                         });
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::Xor { register, value } => {
+                RevmInstruction::Xor { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get(register as usize)?;
@@ -690,7 +728,7 @@ impl Cpu {
                         });
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::Shl { register, value } => {
+                RevmInstruction::Shl { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get(register as usize)?;
@@ -700,7 +738,7 @@ impl Cpu {
                     } as u32);
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::Ashr { register, value } => {
+                RevmInstruction::Ashr { register, value } => {
                     let mut rc = self.register_stack.borrow_mut();
                     let registers = rc.last_mut().unwrap();
                     let destiny_value = registers.get(register as usize)?;
@@ -710,94 +748,94 @@ impl Cpu {
                     } as u32);
                     registers.set(register as usize, new_value)?;
                 }
-                Instruction::Lshr { register, value } => {
+                RevmInstruction::Lshr { register, value } => {
                     self.lshr(register, value)?;
                 }
-                Instruction::Ineg { register } => {
+                RevmInstruction::Ineg { register } => {
                     self.ineg(register)?;
                 }
-                Instruction::Fadd { register, value } => {
+                RevmInstruction::Fadd { register, value } => {
                     self.fadd(register, value)?;
                 }
-                Instruction::Fsub { register, value } => {
+                RevmInstruction::Fsub { register, value } => {
                     self.fsub(register, value)?;
                 }
-                Instruction::Fmul { register, value } => {
+                RevmInstruction::Fmul { register, value } => {
                     self.fmul(register, value)?;
                 }
-                Instruction::Frem { register, value } => {
+                RevmInstruction::Frem { register, value } => {
                     self.frem(register, value)?;
                 }
-                Instruction::Fdiv { register, value } => {
+                RevmInstruction::Fdiv { register, value } => {
                     self.fdiv(register, value)?;
                 }
-                Instruction::Eq { register, value } => {
+                RevmInstruction::Eq { register, value } => {
                     self.eq(register, value)?;
                 }
-                Instruction::Ne { register, value } => {
+                RevmInstruction::Ne { register, value } => {
                     self.ne(register, value)?;
                 }
-                Instruction::Ult { register, value } => {
+                RevmInstruction::Ult { register, value } => {
                     self.ult(register, value)?;
                 }
-                Instruction::Ule { register, value } => {
+                RevmInstruction::Ule { register, value } => {
                     self.ule(register, value)?;
                 }
-                Instruction::Ugt { register, value } => {
+                RevmInstruction::Ugt { register, value } => {
                     self.ugt(register, value)?;
                 }
-                Instruction::Uge { register, value } => {
+                RevmInstruction::Uge { register, value } => {
                     self.uge(register, value)?;
                 }
-                Instruction::Slt { register, value } => {
+                RevmInstruction::Slt { register, value } => {
                     self.slt(register, value)?;
                 }
-                Instruction::Sle { register, value } => {
+                RevmInstruction::Sle { register, value } => {
                     self.sle(register, value)?;
                 }
-                Instruction::Sgt { register, value } => {
+                RevmInstruction::Sgt { register, value } => {
                     self.sgt(register, value)?;
                 }
-                Instruction::Sge { register, value } => {
+                RevmInstruction::Sge { register, value } => {
                     self.sge(register, value)?;
                 }
-                Instruction::Feq { register, value } => {
+                RevmInstruction::Feq { register, value } => {
                     self.feq(register, value)?;
                 }
-                Instruction::Fne { register, value } => {
+                RevmInstruction::Fne { register, value } => {
                     self.fne(register, value)?;
                 }
-                Instruction::Flt { register, value } => {
+                RevmInstruction::Flt { register, value } => {
                     self.flt(register, value)?;
                 }
-                Instruction::Fle { register, value } => {
+                RevmInstruction::Fle { register, value } => {
                     self.fle(register, value)?;
                 }
-                Instruction::Fgt { register, value } => {
+                RevmInstruction::Fgt { register, value } => {
                     self.fgt(register, value)?;
                 }
-                Instruction::Fge { register, value } => {
+                RevmInstruction::Fge { register, value } => {
                     self.fge(register, value)?;
                 }
-                Instruction::Jmp { offset } => {
+                RevmInstruction::Jmp { offset } => {
                     i = ((i as i64) + offset - 1) as usize;
                 }
-                Instruction::Jnz { offset, register } => {
+                RevmInstruction::Jnz { offset, register } => {
                     self.jnz(&mut i, offset, register)?;
                 }
-                Instruction::Jz { offset, register } => {
+                RevmInstruction::Jz { offset, register } => {
                     self.jz(&mut i, offset, register)?;
                 }
-                Instruction::Call {
+                RevmInstruction::Call {
                     return_register,
                     arguments,
                 } => {
                     self.call_function(&mut i, return_register, arguments)?;
                 }
-                Instruction::Ret { value } => {
+                RevmInstruction::Ret { value } => {
                     self.return_from_function(&mut i, value)?;
                 }
-                Instruction::Leave => {
+                RevmInstruction::Leave => {
                     self.leave(&mut i)?;
                 }
                 _ => panic!("Not implemented yet"),
@@ -1220,15 +1258,15 @@ mod tests {
     #[test]
     fn it_should_add_a_new_function_on_fd() {
         let instructions = vec![
-            Instruction::Fd {
+            RevmInstruction::Fd {
                 name: "test".to_owned(),
                 args: 0,
                 skip: 1,
             },
-            Instruction::Leave,
+            RevmInstruction::Leave,
         ];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         cpu.execute(program).unwrap();
         let test = cpu.functions.get("test").unwrap();
         match test {
@@ -1243,12 +1281,12 @@ mod tests {
 
     #[test]
     fn it_should_add_a_constant_to_a_register() {
-        let instructions = vec![Instruction::Mov {
+        let instructions = vec![RevmInstruction::Mov {
             register: 0,
             value: Value::Constant(42),
         }];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         cpu.execute(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
@@ -1257,12 +1295,12 @@ mod tests {
 
     #[test]
     fn it_should_add_a_register_to_a_register() {
-        let instructions = vec![Instruction::Mov {
+        let instructions = vec![RevmInstruction::Mov {
             register: 0,
             value: Value::Register(1),
         }];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         {
             let mut rc = cpu.register_stack.borrow_mut();
             let registers = rc.last_mut().unwrap();
@@ -1276,12 +1314,12 @@ mod tests {
 
     #[test]
     fn it_should_copy_a_global_to_a_register() {
-        let instructions = vec![Instruction::Gg {
+        let instructions = vec![RevmInstruction::Gg {
             string: "test".to_owned(),
             register: 0,
         }];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         cpu.globals.insert("test".to_owned(), 42);
         cpu.execute(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
@@ -1294,23 +1332,23 @@ mod tests {
         expected = "called `Result::unwrap()` on an `Err` value: GlobalNotFound { name: \"test\" }"
     )]
     fn it_should_panic_when_copying_from_an_unexisting_global() {
-        let instructions = vec![Instruction::Gg {
+        let instructions = vec![RevmInstruction::Gg {
             string: "test".to_owned(),
             register: 0,
         }];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         cpu.execute(program).unwrap();
     }
 
     #[test]
     fn it_should_copy_a_register_to_a_global() {
-        let instructions = vec![Instruction::Sg {
+        let instructions = vec![RevmInstruction::Sg {
             string: "test".to_owned(),
             register: 0,
         }];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         {
             let mut rc = cpu.register_stack.borrow_mut();
             let registers = rc.last_mut().unwrap();
@@ -1323,12 +1361,12 @@ mod tests {
 
     #[test]
     fn it_should_load_a_u8_into_a_register() {
-        let instructions = vec![Instruction::Ld8 {
+        let instructions = vec![RevmInstruction::Ld8 {
             register: 0,
             value: Value::Constant(42),
         }];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         cpu.execute(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
@@ -1337,12 +1375,12 @@ mod tests {
 
     #[test]
     fn it_should_load_a_u16_into_a_register() {
-        let instructions = vec![Instruction::Ld16 {
+        let instructions = vec![RevmInstruction::Ld16 {
             register: 0,
             value: Value::Constant(42),
         }];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         cpu.execute(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
@@ -1351,12 +1389,12 @@ mod tests {
 
     #[test]
     fn it_should_load_a_u32_into_a_register() {
-        let instructions = vec![Instruction::Ld32 {
+        let instructions = vec![RevmInstruction::Ld32 {
             register: 0,
             value: Value::Constant(42),
         }];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         cpu.execute(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
@@ -1365,12 +1403,12 @@ mod tests {
 
     #[test]
     fn it_should_load_a_u64_into_a_register() {
-        let instructions = vec![Instruction::Ld64 {
+        let instructions = vec![RevmInstruction::Ld64 {
             register: 0,
             value: Value::Constant(42),
         }];
         let program = Program(instructions);
-        let mut cpu = Cpu::new(1024).unwrap();
+        let mut cpu = CpuRevm::new(1024).unwrap();
         cpu.execute(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
