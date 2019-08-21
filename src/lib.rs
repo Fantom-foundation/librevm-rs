@@ -81,7 +81,7 @@ extern crate failure;
 extern crate runtime_fmt;
 use crate::allocator::Allocator;
 use crate::error::RuntimeError;
-use crate::instruction::{RevmInstruction, Program, Value};
+use crate::instruction::{Program, RevmInstruction, Value};
 use crate::memory::Memory;
 use crate::register_set::RegisterSet;
 use failure::{Error, Fail};
@@ -368,15 +368,16 @@ impl MemoryAddressWidth for u32 {}
 impl MemoryAddressWidth for u64 {}
 
 pub trait Instruction {
-    fn size(&self) -> Result<u8, Error>;
+    fn size(&self) -> Result<usize, Error>;
     fn get_cycles(&self) -> Result<usize, Error>;
 }
 
 pub trait Cpu<W, I, F>
-    where
-        W: MemoryAddressWidth + Clone,
-        I: Instruction + ToString + From<Vec<W>>,
-        F: Fail, {
+where
+    W: MemoryAddressWidth + Clone,
+    I: Instruction + ToString + From<Vec<W>>,
+    F: Fail,
+{
     fn execute(&mut self) -> Result<usize, Error> {
         let instruction = I::from(self.get_next_instruction_bytes());
         if !self.can_run(&instruction) {
@@ -391,11 +392,11 @@ pub trait Cpu<W, I, F>
         instruction.get_cycles()
     }
     fn execute_instruction(&mut self, instruction: &I) -> Result<(), Error>;
-    fn get_pc(&self) -> u16;
+    fn get_pc(&self) -> usize;
     fn get_next_instruction_bytes(&self) -> Vec<W>;
     fn can_run(&self, instruction: &I) -> bool;
     fn is_done(&self) -> bool;
-    fn increase_pc(&mut self, steps: u8);
+    fn increase_pc(&mut self, steps: usize);
 }
 
 pub struct CpuRevm {
@@ -404,6 +405,7 @@ pub struct CpuRevm {
     pub(crate) functions: HashMap<String, Function>,
     globals: HashMap<String, u64>,
     memory: Memory,
+    pc: usize,
     register_stack: Rc<RefCell<Vec<RegisterSet>>>,
 }
 
@@ -444,6 +446,7 @@ impl CpuRevm {
             allocator,
             functions,
             memory,
+            pc: 0,
             register_stack,
             call_stack: Vec::new(),
             globals: HashMap::new(),
@@ -472,376 +475,379 @@ impl CpuRevm {
     }
 
     pub fn execute(&mut self, program: Program) -> Result<(), Error> {
-        let mut i = 0;
-        while i < program.0.len() {
-            let instruction = program.0[i].clone();
-            match instruction {
-                RevmInstruction::Fd { name, args, skip } => {
-                    self.functions
-                        .insert(name.clone(), Function::UserDefined(i, args, skip));
-                    i += skip as usize;
-                }
-                RevmInstruction::Mov { register, value } => self.value_to_register(register, value)?,
-                RevmInstruction::Gg { string, register } => {
-                    let value = *self
-                        .globals
-                        .get(&string)
-                        .ok_or(RuntimeError::GlobalNotFound {
-                            name: string.clone(),
-                        })?;
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    registers.set(register as usize, value)?;
-                }
-                RevmInstruction::Sg { string, register } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let value = registers.get(register as usize)?;
-                    self.globals.insert(string, value);
-                }
-                RevmInstruction::Css { string, register } => {
-                    let string_size = (string.len() as f64 / 8f64).ceil() as usize;
-                    let address = self.allocator.borrow_mut().malloc(string_size)?;
-                    self.memory.copy_u8_vector(string.as_bytes(), address);
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    registers.set(register as usize, address as u64)?;
-                }
-                RevmInstruction::Ld8 { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    registers.set(
-                        register as usize,
-                        match value {
-                            Value::Register(source) => {
-                                u64::from(registers.get(source as usize)? as u8)
-                            }
-                            Value::Constant(value) => value,
-                        },
-                    )?;
-                }
-                RevmInstruction::Ld16 { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    registers.set(
-                        register as usize,
-                        match value {
-                            Value::Register(source) => {
-                                u64::from(registers.get(source as usize)? as u16)
-                            }
-                            Value::Constant(value) => value,
-                        },
-                    )?;
-                }
-                RevmInstruction::Ld32 { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    registers.set(
-                        register as usize,
-                        match value {
-                            Value::Register(source) => {
-                                u64::from(registers.get(source as usize)? as u32)
-                            }
-                            Value::Constant(value) => value,
-                        },
-                    )?;
-                }
-                RevmInstruction::Ld64 { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    registers.set(
-                        register as usize,
-                        match value {
-                            Value::Register(source) => registers.get(source as usize)?,
-                            Value::Constant(value) => value,
-                        },
-                    )?;
-                }
-                RevmInstruction::St8 {
-                    register,
-                    value: address_value,
-                } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let value = registers.get(register as usize)? as u8;
-                    let address = match address_value {
-                        Value::Constant(a) => a as usize,
-                        Value::Register(r) => registers.get(r as usize)? as usize,
-                    };
-                    self.memory.copy_u8(value, address);
-                }
-                RevmInstruction::St16 {
-                    register,
-                    value: address_value,
-                } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let value = registers.get(register as usize)? as u16;
-                    let address = match address_value {
-                        Value::Constant(a) => a as usize,
-                        Value::Register(r) => registers.get(r as usize)? as usize,
-                    };
-                    self.memory.copy_u16(value, address);
-                }
-                RevmInstruction::St32 {
-                    register,
-                    value: address_value,
-                } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let value = registers.get(register as usize)? as u32;
-                    let address = match address_value {
-                        Value::Constant(a) => a as usize,
-                        Value::Register(r) => registers.get(r as usize)? as usize,
-                    };
-                    self.memory.copy_u32(value, address);
-                }
-                RevmInstruction::St64 {
-                    register,
-                    value: address_value,
-                } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let value = registers.get(register as usize)? as u64;
-                    let address = match address_value {
-                        Value::Constant(a) => a as usize,
-                        Value::Register(r) => registers.get(r as usize)? as usize,
-                    };
-                    self.memory.copy_u64(value, address);
-                }
-                RevmInstruction::Lea { destiny, source } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let effective_address = registers.address + source as usize;
-                    registers.set(destiny as usize, effective_address as u64)?;
-                }
-                RevmInstruction::Iadd { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_i64(register as usize)?;
-                    let new_value = destiny_value.wrapping_add(match value {
-                        Value::Register(s) => registers.get_i64(s as usize)?,
-                        Value::Constant(v) => v as i64,
-                    });
-                    registers.set_i64(register as usize, new_value);
-                }
-                RevmInstruction::Isub { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_i64(register as usize)?;
-                    let new_value = destiny_value.wrapping_sub(match value {
-                        Value::Register(s) => registers.get_i64(s as usize)?,
-                        Value::Constant(v) => v as i64,
-                    });
-                    registers.set_i64(register as usize, new_value);
-                }
-                RevmInstruction::Smul { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_i64(register as usize)?;
-                    let new_value = destiny_value.wrapping_mul(match value {
-                        Value::Register(s) => registers.get_i64(s as usize)?,
-                        Value::Constant(v) => v as i64,
-                    });
-                    registers.set_i64(register as usize, new_value);
-                }
-                RevmInstruction::Umul { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value.wrapping_mul(match value {
-                        Value::Register(s) => registers.get(s as usize)?,
-                        Value::Constant(v) => v,
-                    });
-                    registers.set(register as usize, new_value)?;
-                }
-                RevmInstruction::Srem { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_i64(register as usize)?;
-                    let new_value = destiny_value.wrapping_rem(match value {
-                        Value::Register(s) => registers.get_i64(s as usize)?,
-                        Value::Constant(v) => v as i64,
-                    });
-                    registers.set_i64(register as usize, new_value);
-                }
-                RevmInstruction::Urem { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value.wrapping_rem(match value {
-                        Value::Register(s) => registers.get(s as usize)?,
-                        Value::Constant(v) => v,
-                    });
-                    registers.set(register as usize, new_value)?;
-                }
-                RevmInstruction::Sdiv { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get_i64(register as usize)?;
-                    let new_value = destiny_value.wrapping_div(match value {
-                        Value::Register(s) => registers.get_i64(s as usize)?,
-                        Value::Constant(v) => v as i64,
-                    });
-                    registers.set_i64(register as usize, new_value);
-                }
-                RevmInstruction::Udiv { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value.wrapping_div(match value {
-                        Value::Register(s) => registers.get(s as usize)?,
-                        Value::Constant(v) => v,
-                    });
-                    registers.set(register as usize, new_value)?;
-                }
-                RevmInstruction::And { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value
-                        & (match value {
-                            Value::Register(s) => registers.get(s as usize)?,
-                            Value::Constant(v) => v,
-                        });
-                    registers.set(register as usize, new_value)?;
-                }
-                RevmInstruction::Or { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value
-                        | (match value {
-                            Value::Register(s) => registers.get(s as usize)?,
-                            Value::Constant(v) => v,
-                        });
-                    registers.set(register as usize, new_value)?;
-                }
-                RevmInstruction::Xor { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value
-                        ^ (match value {
-                            Value::Register(s) => registers.get(s as usize)?,
-                            Value::Constant(v) => v,
-                        });
-                    registers.set(register as usize, new_value)?;
-                }
-                RevmInstruction::Shl { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value.wrapping_shl(match value {
-                        Value::Register(s) => registers.get(s as usize)?,
-                        Value::Constant(v) => v,
-                    } as u32);
-                    registers.set(register as usize, new_value)?;
-                }
-                RevmInstruction::Ashr { register, value } => {
-                    let mut rc = self.register_stack.borrow_mut();
-                    let registers = rc.last_mut().unwrap();
-                    let destiny_value = registers.get(register as usize)?;
-                    let new_value = destiny_value.wrapping_shr(match value {
-                        Value::Register(s) => registers.get(s as usize)?,
-                        Value::Constant(v) => v,
-                    } as u32);
-                    registers.set(register as usize, new_value)?;
-                }
-                RevmInstruction::Lshr { register, value } => {
-                    self.lshr(register, value)?;
-                }
-                RevmInstruction::Ineg { register } => {
-                    self.ineg(register)?;
-                }
-                RevmInstruction::Fadd { register, value } => {
-                    self.fadd(register, value)?;
-                }
-                RevmInstruction::Fsub { register, value } => {
-                    self.fsub(register, value)?;
-                }
-                RevmInstruction::Fmul { register, value } => {
-                    self.fmul(register, value)?;
-                }
-                RevmInstruction::Frem { register, value } => {
-                    self.frem(register, value)?;
-                }
-                RevmInstruction::Fdiv { register, value } => {
-                    self.fdiv(register, value)?;
-                }
-                RevmInstruction::Eq { register, value } => {
-                    self.eq(register, value)?;
-                }
-                RevmInstruction::Ne { register, value } => {
-                    self.ne(register, value)?;
-                }
-                RevmInstruction::Ult { register, value } => {
-                    self.ult(register, value)?;
-                }
-                RevmInstruction::Ule { register, value } => {
-                    self.ule(register, value)?;
-                }
-                RevmInstruction::Ugt { register, value } => {
-                    self.ugt(register, value)?;
-                }
-                RevmInstruction::Uge { register, value } => {
-                    self.uge(register, value)?;
-                }
-                RevmInstruction::Slt { register, value } => {
-                    self.slt(register, value)?;
-                }
-                RevmInstruction::Sle { register, value } => {
-                    self.sle(register, value)?;
-                }
-                RevmInstruction::Sgt { register, value } => {
-                    self.sgt(register, value)?;
-                }
-                RevmInstruction::Sge { register, value } => {
-                    self.sge(register, value)?;
-                }
-                RevmInstruction::Feq { register, value } => {
-                    self.feq(register, value)?;
-                }
-                RevmInstruction::Fne { register, value } => {
-                    self.fne(register, value)?;
-                }
-                RevmInstruction::Flt { register, value } => {
-                    self.flt(register, value)?;
-                }
-                RevmInstruction::Fle { register, value } => {
-                    self.fle(register, value)?;
-                }
-                RevmInstruction::Fgt { register, value } => {
-                    self.fgt(register, value)?;
-                }
-                RevmInstruction::Fge { register, value } => {
-                    self.fge(register, value)?;
-                }
-                RevmInstruction::Jmp { offset } => {
-                    i = ((i as i64) + offset - 1) as usize;
-                }
-                RevmInstruction::Jnz { offset, register } => {
-                    self.jnz(&mut i, offset, register)?;
-                }
-                RevmInstruction::Jz { offset, register } => {
-                    self.jz(&mut i, offset, register)?;
-                }
-                RevmInstruction::Call {
-                    return_register,
-                    arguments,
-                } => {
-                    self.call_function(&mut i, return_register, arguments)?;
-                }
-                RevmInstruction::Ret { value } => {
-                    self.return_from_function(&mut i, value)?;
-                }
-                RevmInstruction::Leave => {
-                    self.leave(&mut i)?;
-                }
-                _ => panic!("Not implemented yet"),
-            }
-            i += 1;
+        self.pc = 0;
+        while self.pc < program.0.len() {
+            let instruction = program.0[self.pc].clone();
+            self.execute_revm_instruction(instruction)?;
+            self.pc += 1;
         }
+        Ok(())
+    }
+
+    fn execute_revm_instruction(&mut self, instruction: RevmInstruction) -> Result<(), Error> {
+        match instruction {
+            RevmInstruction::Fd { name, args, skip } => {
+                self.functions
+                    .insert(name.clone(), Function::UserDefined(self.pc, args, skip));
+                self.pc += skip as usize;
+            }
+            RevmInstruction::Mov { register, value } => self.value_to_register(register, value)?,
+            RevmInstruction::Gg { string, register } => {
+                let value = *self
+                    .globals
+                    .get(&string)
+                    .ok_or(RuntimeError::GlobalNotFound {
+                        name: string.clone(),
+                    })?;
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                registers.set(register as usize, value)?;
+            }
+            RevmInstruction::Sg { string, register } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let value = registers.get(register as usize)?;
+                self.globals.insert(string, value);
+            }
+            RevmInstruction::Css { string, register } => {
+                let string_size = (string.len() as f64 / 8f64).ceil() as usize;
+                let address = self.allocator.borrow_mut().malloc(string_size)?;
+                self.memory.copy_u8_vector(string.as_bytes(), address);
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                registers.set(register as usize, address as u64)?;
+            }
+            RevmInstruction::Ld8 { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                registers.set(
+                    register as usize,
+                    match value {
+                        Value::Register(source) => u64::from(registers.get(source as usize)? as u8),
+                        Value::Constant(value) => value,
+                    },
+                )?;
+            }
+            RevmInstruction::Ld16 { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                registers.set(
+                    register as usize,
+                    match value {
+                        Value::Register(source) => {
+                            u64::from(registers.get(source as usize)? as u16)
+                        }
+                        Value::Constant(value) => value,
+                    },
+                )?;
+            }
+            RevmInstruction::Ld32 { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                registers.set(
+                    register as usize,
+                    match value {
+                        Value::Register(source) => {
+                            u64::from(registers.get(source as usize)? as u32)
+                        }
+                        Value::Constant(value) => value,
+                    },
+                )?;
+            }
+            RevmInstruction::Ld64 { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                registers.set(
+                    register as usize,
+                    match value {
+                        Value::Register(source) => registers.get(source as usize)?,
+                        Value::Constant(value) => value,
+                    },
+                )?;
+            }
+            RevmInstruction::St8 {
+                register,
+                value: address_value,
+            } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let value = registers.get(register as usize)? as u8;
+                let address = match address_value {
+                    Value::Constant(a) => a as usize,
+                    Value::Register(r) => registers.get(r as usize)? as usize,
+                };
+                self.memory.copy_u8(value, address);
+            }
+            RevmInstruction::St16 {
+                register,
+                value: address_value,
+            } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let value = registers.get(register as usize)? as u16;
+                let address = match address_value {
+                    Value::Constant(a) => a as usize,
+                    Value::Register(r) => registers.get(r as usize)? as usize,
+                };
+                self.memory.copy_u16(value, address);
+            }
+            RevmInstruction::St32 {
+                register,
+                value: address_value,
+            } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let value = registers.get(register as usize)? as u32;
+                let address = match address_value {
+                    Value::Constant(a) => a as usize,
+                    Value::Register(r) => registers.get(r as usize)? as usize,
+                };
+                self.memory.copy_u32(value, address);
+            }
+            RevmInstruction::St64 {
+                register,
+                value: address_value,
+            } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let value = registers.get(register as usize)? as u64;
+                let address = match address_value {
+                    Value::Constant(a) => a as usize,
+                    Value::Register(r) => registers.get(r as usize)? as usize,
+                };
+                self.memory.copy_u64(value, address);
+            }
+            RevmInstruction::Lea { destiny, source } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let effective_address = registers.address + source as usize;
+                registers.set(destiny as usize, effective_address as u64)?;
+            }
+            RevmInstruction::Iadd { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get_i64(register as usize)?;
+                let new_value = destiny_value.wrapping_add(match value {
+                    Value::Register(s) => registers.get_i64(s as usize)?,
+                    Value::Constant(v) => v as i64,
+                });
+                registers.set_i64(register as usize, new_value);
+            }
+            RevmInstruction::Isub { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get_i64(register as usize)?;
+                let new_value = destiny_value.wrapping_sub(match value {
+                    Value::Register(s) => registers.get_i64(s as usize)?,
+                    Value::Constant(v) => v as i64,
+                });
+                registers.set_i64(register as usize, new_value);
+            }
+            RevmInstruction::Smul { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get_i64(register as usize)?;
+                let new_value = destiny_value.wrapping_mul(match value {
+                    Value::Register(s) => registers.get_i64(s as usize)?,
+                    Value::Constant(v) => v as i64,
+                });
+                registers.set_i64(register as usize, new_value);
+            }
+            RevmInstruction::Umul { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get(register as usize)?;
+                let new_value = destiny_value.wrapping_mul(match value {
+                    Value::Register(s) => registers.get(s as usize)?,
+                    Value::Constant(v) => v,
+                });
+                registers.set(register as usize, new_value)?;
+            }
+            RevmInstruction::Srem { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get_i64(register as usize)?;
+                let new_value = destiny_value.wrapping_rem(match value {
+                    Value::Register(s) => registers.get_i64(s as usize)?,
+                    Value::Constant(v) => v as i64,
+                });
+                registers.set_i64(register as usize, new_value);
+            }
+            RevmInstruction::Urem { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get(register as usize)?;
+                let new_value = destiny_value.wrapping_rem(match value {
+                    Value::Register(s) => registers.get(s as usize)?,
+                    Value::Constant(v) => v,
+                });
+                registers.set(register as usize, new_value)?;
+            }
+            RevmInstruction::Sdiv { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get_i64(register as usize)?;
+                let new_value = destiny_value.wrapping_div(match value {
+                    Value::Register(s) => registers.get_i64(s as usize)?,
+                    Value::Constant(v) => v as i64,
+                });
+                registers.set_i64(register as usize, new_value);
+            }
+            RevmInstruction::Udiv { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get(register as usize)?;
+                let new_value = destiny_value.wrapping_div(match value {
+                    Value::Register(s) => registers.get(s as usize)?,
+                    Value::Constant(v) => v,
+                });
+                registers.set(register as usize, new_value)?;
+            }
+            RevmInstruction::And { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get(register as usize)?;
+                let new_value = destiny_value
+                    & (match value {
+                        Value::Register(s) => registers.get(s as usize)?,
+                        Value::Constant(v) => v,
+                    });
+                registers.set(register as usize, new_value)?;
+            }
+            RevmInstruction::Or { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get(register as usize)?;
+                let new_value = destiny_value
+                    | (match value {
+                        Value::Register(s) => registers.get(s as usize)?,
+                        Value::Constant(v) => v,
+                    });
+                registers.set(register as usize, new_value)?;
+            }
+            RevmInstruction::Xor { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get(register as usize)?;
+                let new_value = destiny_value
+                    ^ (match value {
+                        Value::Register(s) => registers.get(s as usize)?,
+                        Value::Constant(v) => v,
+                    });
+                registers.set(register as usize, new_value)?;
+            }
+            RevmInstruction::Shl { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get(register as usize)?;
+                let new_value = destiny_value.wrapping_shl(match value {
+                    Value::Register(s) => registers.get(s as usize)?,
+                    Value::Constant(v) => v,
+                } as u32);
+                registers.set(register as usize, new_value)?;
+            }
+            RevmInstruction::Ashr { register, value } => {
+                let mut rc = self.register_stack.borrow_mut();
+                let registers = rc.last_mut().unwrap();
+                let destiny_value = registers.get(register as usize)?;
+                let new_value = destiny_value.wrapping_shr(match value {
+                    Value::Register(s) => registers.get(s as usize)?,
+                    Value::Constant(v) => v,
+                } as u32);
+                registers.set(register as usize, new_value)?;
+            }
+            RevmInstruction::Lshr { register, value } => {
+                self.lshr(register, value)?;
+            }
+            RevmInstruction::Ineg { register } => {
+                self.ineg(register)?;
+            }
+            RevmInstruction::Fadd { register, value } => {
+                self.fadd(register, value)?;
+            }
+            RevmInstruction::Fsub { register, value } => {
+                self.fsub(register, value)?;
+            }
+            RevmInstruction::Fmul { register, value } => {
+                self.fmul(register, value)?;
+            }
+            RevmInstruction::Frem { register, value } => {
+                self.frem(register, value)?;
+            }
+            RevmInstruction::Fdiv { register, value } => {
+                self.fdiv(register, value)?;
+            }
+            RevmInstruction::Eq { register, value } => {
+                self.eq(register, value)?;
+            }
+            RevmInstruction::Ne { register, value } => {
+                self.ne(register, value)?;
+            }
+            RevmInstruction::Ult { register, value } => {
+                self.ult(register, value)?;
+            }
+            RevmInstruction::Ule { register, value } => {
+                self.ule(register, value)?;
+            }
+            RevmInstruction::Ugt { register, value } => {
+                self.ugt(register, value)?;
+            }
+            RevmInstruction::Uge { register, value } => {
+                self.uge(register, value)?;
+            }
+            RevmInstruction::Slt { register, value } => {
+                self.slt(register, value)?;
+            }
+            RevmInstruction::Sle { register, value } => {
+                self.sle(register, value)?;
+            }
+            RevmInstruction::Sgt { register, value } => {
+                self.sgt(register, value)?;
+            }
+            RevmInstruction::Sge { register, value } => {
+                self.sge(register, value)?;
+            }
+            RevmInstruction::Feq { register, value } => {
+                self.feq(register, value)?;
+            }
+            RevmInstruction::Fne { register, value } => {
+                self.fne(register, value)?;
+            }
+            RevmInstruction::Flt { register, value } => {
+                self.flt(register, value)?;
+            }
+            RevmInstruction::Fle { register, value } => {
+                self.fle(register, value)?;
+            }
+            RevmInstruction::Fgt { register, value } => {
+                self.fgt(register, value)?;
+            }
+            RevmInstruction::Fge { register, value } => {
+                self.fge(register, value)?;
+            }
+            RevmInstruction::Jmp { offset } => {
+                self.pc = ((self.pc as i64) + offset - 1) as usize;
+            }
+            RevmInstruction::Jnz { offset, register } => {
+                self.jnz(offset, register)?;
+            }
+            RevmInstruction::Jz { offset, register } => {
+                self.jz(offset, register)?;
+            }
+            RevmInstruction::Call {
+                return_register,
+                arguments,
+            } => {
+                self.call_function(return_register, arguments)?;
+            }
+            RevmInstruction::Ret { value } => {
+                self.return_from_function(value)?;
+            }
+            RevmInstruction::Leave => {
+                self.leave()?;
+            }
+            _ => panic!("Not implemented yet"),
+        };
         Ok(())
     }
 
@@ -1140,35 +1146,35 @@ impl CpuRevm {
         Ok(())
     }
 
-    fn jnz(&mut self, i: &mut usize, offset: i64, register: u8) -> Result<(), Error> {
+    fn jnz(&mut self, offset: i64, register: u8) -> Result<(), Error> {
         let rc = self.register_stack.borrow();
         let registers = rc.last().unwrap();
         if registers.get(register as usize)? != 0 {
-            *i = ((*i as i64) + offset - 1) as usize;
+            self.pc = ((self.pc as i64) + offset - 1) as usize;
         }
         Ok(())
     }
 
-    fn jz(&mut self, i: &mut usize, offset: i64, register: u8) -> Result<(), Error> {
+    fn jz(&mut self, offset: i64, register: u8) -> Result<(), Error> {
         let rc = self.register_stack.borrow();
         let registers = rc.last().unwrap();
         if registers.get(register as usize)? == 0 {
-            *i = ((*i as i64) + offset - 1) as usize;
+            self.pc = ((self.pc as i64) + offset - 1) as usize;
         }
         Ok(())
     }
 
-    fn leave(&mut self, i: &mut usize) -> Result<(), Error> {
+    fn leave(&mut self) -> Result<(), Error> {
         self.register_stack.borrow_mut().pop();
-        let (new_i, _) = self
+        let (new_pc, _) = self
             .call_stack
             .pop()
             .ok_or(RuntimeError::ReturnOnNoFunction)?;
-        *i = new_i;
+        self.pc = new_pc;
         Ok(())
     }
 
-    fn return_from_function(&mut self, i: &mut usize, value: Value) -> Result<(), Error> {
+    fn return_from_function(&mut self, value: Value) -> Result<(), Error> {
         let (new_i, r) = self
             .call_stack
             .pop()
@@ -1181,13 +1187,12 @@ impl CpuRevm {
         };
         self.register_stack.borrow_mut().pop();
         registers.set(r as usize, ret_value)?;
-        *i = new_i;
+        self.pc = new_i;
         Ok(())
     }
 
     fn call_function(
         &mut self,
-        i: &mut usize,
         return_register: u8,
         arguments: [Option<u8>; 8],
     ) -> Result<(), Error> {
@@ -1217,8 +1222,8 @@ impl CpuRevm {
             }
             Function::UserDefined(new_i, _nargs, _skip) => {
                 let new_i = *new_i;
-                self.call_stack.push((*i, return_register));
-                *i = new_i;
+                self.call_stack.push((self.pc, return_register));
+                self.pc = new_i;
                 let new_register_set = self.create_new_register_set()?;
                 self.register_stack.borrow_mut().push(new_register_set);
             }
