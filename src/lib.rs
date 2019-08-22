@@ -379,7 +379,9 @@ where
     F: Fail,
 {
     fn execute(&mut self) -> Result<usize, Error> {
-        let instruction = I::from(self.get_next_instruction_bytes());
+        let instruction = self
+            .get_next_instruction()
+            .ok_or(RuntimeError::NoMoreInstructions)?;
         if !self.can_run(&instruction) {
             return Ok(0);
         }
@@ -393,7 +395,7 @@ where
     }
     fn execute_instruction(&mut self, instruction: &I) -> Result<(), Error>;
     fn get_pc(&self) -> usize;
-    fn get_next_instruction_bytes(&self) -> Vec<W>;
+    fn get_next_instruction(&self) -> Option<I>;
     fn can_run(&self, instruction: &I) -> bool;
     fn is_done(&self) -> bool;
     fn increase_pc(&mut self, steps: usize);
@@ -407,6 +409,7 @@ pub struct CpuRevm {
     memory: Memory,
     pc: usize,
     register_stack: Rc<RefCell<Vec<RegisterSet>>>,
+    program: Program,
 }
 
 impl CpuRevm {
@@ -450,6 +453,7 @@ impl CpuRevm {
             register_stack,
             call_stack: Vec::new(),
             globals: HashMap::new(),
+            program: Program(vec![]),
         };
         cpu.add_function("puts")?;
         cpu.add_function("printf")?;
@@ -474,14 +478,37 @@ impl CpuRevm {
         Ok(())
     }
 
-    pub fn execute(&mut self, program: Program) -> Result<(), Error> {
+    pub fn execute_program(&mut self, program: Program) -> Result<(), Error> {
+        self.program = program;
         self.pc = 0;
-        while self.pc < program.0.len() {
-            let instruction = program.0[self.pc].clone();
+        while !self.is_done() {
+            let instruction = self
+                .get_next_instruction()
+                .ok_or(RuntimeError::NoMoreInstructions)?;
             self.execute_revm_instruction(instruction)?;
-            self.pc += 1;
+            self.increase_pc();
         }
         Ok(())
+    }
+
+    fn can_run(&self) -> bool {
+        true
+    }
+
+    fn is_done(&self) -> bool {
+        !self.program.0.is_empty()
+    }
+
+    fn get_next_instruction(&mut self) -> Option<RevmInstruction> {
+        self.program.0.pop()
+    }
+
+    fn increase_pc(&mut self) {
+        self.pc += 1;
+    }
+
+    fn get_pc(&self) -> usize {
+        self.pc
     }
 
     fn execute_revm_instruction(&mut self, instruction: RevmInstruction) -> Result<(), Error> {
@@ -1272,7 +1299,7 @@ mod tests {
         ];
         let program = Program(instructions);
         let mut cpu = CpuRevm::new(1024).unwrap();
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
         let test = cpu.functions.get("test").unwrap();
         match test {
             Function::UserDefined(ref start, ref args, ref skip) => {
@@ -1292,7 +1319,7 @@ mod tests {
         }];
         let program = Program(instructions);
         let mut cpu = CpuRevm::new(1024).unwrap();
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
         assert_eq!(registers.get(0).unwrap(), 42);
@@ -1311,7 +1338,7 @@ mod tests {
             let registers = rc.last_mut().unwrap();
             registers.set(1, 42).unwrap();
         }
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
         assert_eq!(registers.get(0).unwrap(), 42);
@@ -1326,7 +1353,7 @@ mod tests {
         let program = Program(instructions);
         let mut cpu = CpuRevm::new(1024).unwrap();
         cpu.globals.insert("test".to_owned(), 42);
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
         assert_eq!(registers.get(0).unwrap(), 42);
@@ -1343,7 +1370,7 @@ mod tests {
         }];
         let program = Program(instructions);
         let mut cpu = CpuRevm::new(1024).unwrap();
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
     }
 
     #[test]
@@ -1359,7 +1386,7 @@ mod tests {
             let registers = rc.last_mut().unwrap();
             registers.set(0, 42).unwrap();
         }
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
         let global = cpu.globals.get("test").unwrap().clone();
         assert_eq!(global, 42);
     }
@@ -1372,7 +1399,7 @@ mod tests {
         }];
         let program = Program(instructions);
         let mut cpu = CpuRevm::new(1024).unwrap();
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
         assert_eq!(registers.get(0).unwrap(), 42);
@@ -1386,7 +1413,7 @@ mod tests {
         }];
         let program = Program(instructions);
         let mut cpu = CpuRevm::new(1024).unwrap();
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
         assert_eq!(registers.get(0).unwrap(), 42);
@@ -1400,7 +1427,7 @@ mod tests {
         }];
         let program = Program(instructions);
         let mut cpu = CpuRevm::new(1024).unwrap();
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
         assert_eq!(registers.get(0).unwrap(), 42);
@@ -1414,7 +1441,7 @@ mod tests {
         }];
         let program = Program(instructions);
         let mut cpu = CpuRevm::new(1024).unwrap();
-        cpu.execute(program).unwrap();
+        cpu.execute_program(program).unwrap();
         let mut rc = cpu.register_stack.borrow_mut();
         let registers = rc.last_mut().unwrap();
         assert_eq!(registers.get(0).unwrap(), 42);

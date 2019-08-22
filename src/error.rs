@@ -33,6 +33,8 @@ pub enum RuntimeError {
     InvalidRegisterIndex { register: usize },
     #[fail(display = "Trying to return from a never called function")]
     ReturnOnNoFunction,
+    #[fail(display = "No more instructions")]
+    NoMoreInstructions,
 }
 
 #[derive(Debug, Fail)]
