@@ -1,6 +1,7 @@
 use crate::error::ParsingError;
 use failure::Error;
 use std::convert::TryFrom;
+use crate::Instruction;
 
 #[derive(Clone, Debug)]
 pub struct Program(pub Vec<RevmInstruction>);
@@ -282,6 +283,15 @@ macro_rules! parse_instruction_with_string_and_register {
             register: RevmInstruction::parse_register($stream)?,
         }
     };
+}
+
+impl Instruction for RevmInstruction {
+    fn size(&self) -> Result<usize, Error> {
+        Ok(1)
+    }
+    fn get_cycles(&self) -> Result<usize, Error> {
+        Ok(1)
+    }
 }
 
 impl RevmInstruction {

@@ -84,7 +84,7 @@ use crate::error::RuntimeError;
 use crate::instruction::{Program, RevmInstruction, Value};
 use crate::memory::Memory;
 use crate::register_set::RegisterSet;
-use failure::{Error, Fail};
+use failure::Error;
 //use libc::scanf;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -360,43 +360,34 @@ impl NativeFunctions {
     }
 }
 
-pub trait MemoryAddressWidth {}
-
-impl MemoryAddressWidth for u8 {}
-impl MemoryAddressWidth for u16 {}
-impl MemoryAddressWidth for u32 {}
-impl MemoryAddressWidth for u64 {}
-
 pub trait Instruction {
     fn size(&self) -> Result<usize, Error>;
     fn get_cycles(&self) -> Result<usize, Error>;
 }
 
-pub trait Cpu<W, I, F>
+pub trait Cpu<I>
 where
-    W: MemoryAddressWidth + Clone,
-    I: Instruction + ToString + From<Vec<W>>,
-    F: Fail,
+    I: Instruction,
 {
     fn execute(&mut self) -> Result<usize, Error> {
         let instruction = self
             .get_next_instruction()
             .ok_or(RuntimeError::NoMoreInstructions)?;
-        if !self.can_run(&instruction) {
+        if !self.can_run() {
             return Ok(0);
         }
         self.increase_pc(instruction.size()?);
-        self.execute_instruction(&instruction)?;
         let cycles = self.get_cycles_for_instruction(&instruction)?;
+        self.execute_instruction(instruction)?;
         Ok(cycles)
     }
     fn get_cycles_for_instruction(&mut self, instruction: &I) -> Result<usize, Error> {
         instruction.get_cycles()
     }
-    fn execute_instruction(&mut self, instruction: &I) -> Result<(), Error>;
+    fn execute_instruction(&mut self, instruction: I) -> Result<(), Error>;
     fn get_pc(&self) -> usize;
-    fn get_next_instruction(&self) -> Option<I>;
-    fn can_run(&self, instruction: &I) -> bool;
+    fn get_next_instruction(&mut self) -> Option<I>;
+    fn can_run(&self) -> bool;
     fn is_done(&self) -> bool;
     fn increase_pc(&mut self, steps: usize);
 }
@@ -412,85 +403,7 @@ pub struct CpuRevm {
     program: Program,
 }
 
-impl CpuRevm {
-    pub fn new(capacity: usize) -> Result<CpuRevm, Error> {
-        let memory = Memory::new(capacity);
-        let allocator = Rc::new(RefCell::new(Allocator::new(capacity)));
-        let register_stack = Rc::new(RefCell::new(vec![]));
-        let mut functions = HashMap::new();
-        functions.insert(
-            "puts".to_owned(),
-            Function::Native(Box::new(NativeFunctions::puts)),
-        );
-        /*
-        TODO: Make scanf use the sandbox
-        functions.insert(
-            "scanf".to_owned(),
-            Function::Native(Box::new(|cpu, args| cpu.scanf(args))),
-        );
-        */
-        functions.insert(
-            "printf".to_owned(),
-            Function::Native(Box::new(NativeFunctions::printf)),
-        );
-        functions.insert(
-            "exit".to_owned(),
-            Function::Native(Box::new(NativeFunctions::exit)),
-        );
-        functions.insert(
-            "malloc".to_owned(),
-            Function::Native(Box::new(NativeFunctions::malloc)),
-        );
-        functions.insert(
-            "free".to_owned(),
-            Function::Native(Box::new(NativeFunctions::free)),
-        );
-        let mut cpu = CpuRevm {
-            allocator,
-            functions,
-            memory,
-            pc: 0,
-            register_stack,
-            call_stack: Vec::new(),
-            globals: HashMap::new(),
-            program: Program(vec![]),
-        };
-        cpu.add_function("puts")?;
-        cpu.add_function("printf")?;
-        cpu.add_function("malloc")?;
-        cpu.add_function("exit")?;
-        cpu.add_function("free")?;
-        let register_set = cpu.create_new_register_set()?;
-        cpu.register_stack.borrow_mut().push(register_set);
-        Ok(cpu)
-    }
-
-    fn add_function(&mut self, name: &'static str) -> Result<(), Error> {
-        match self.functions.get(name) {
-            Some(f) => {
-                let address = self.allocator.borrow_mut().malloc_t::<Function>()?;
-                self.memory.copy_t(f, address);
-            }
-            None => Err(RuntimeError::GlobalNotFound {
-                name: name.to_owned(),
-            })?,
-        };
-        Ok(())
-    }
-
-    pub fn execute_program(&mut self, program: Program) -> Result<(), Error> {
-        self.program = program;
-        self.pc = 0;
-        while !self.is_done() {
-            let instruction = self
-                .get_next_instruction()
-                .ok_or(RuntimeError::NoMoreInstructions)?;
-            self.execute_revm_instruction(instruction)?;
-            self.increase_pc();
-        }
-        Ok(())
-    }
-
+impl Cpu<RevmInstruction> for CpuRevm {
     fn can_run(&self) -> bool {
         true
     }
@@ -503,15 +416,15 @@ impl CpuRevm {
         self.program.0.pop()
     }
 
-    fn increase_pc(&mut self) {
-        self.pc += 1;
+    fn increase_pc(&mut self, steps: usize) {
+        self.pc += steps;
     }
 
     fn get_pc(&self) -> usize {
         self.pc
     }
 
-    fn execute_revm_instruction(&mut self, instruction: RevmInstruction) -> Result<(), Error> {
+    fn execute_instruction(&mut self, instruction: RevmInstruction) -> Result<(), Error> {
         match instruction {
             RevmInstruction::Fd { name, args, skip } => {
                 self.functions
@@ -736,9 +649,9 @@ impl CpuRevm {
                 let destiny_value = registers.get(register as usize)?;
                 let new_value = destiny_value
                     & (match value {
-                        Value::Register(s) => registers.get(s as usize)?,
-                        Value::Constant(v) => v,
-                    });
+                    Value::Register(s) => registers.get(s as usize)?,
+                    Value::Constant(v) => v,
+                });
                 registers.set(register as usize, new_value)?;
             }
             RevmInstruction::Or { register, value } => {
@@ -747,9 +660,9 @@ impl CpuRevm {
                 let destiny_value = registers.get(register as usize)?;
                 let new_value = destiny_value
                     | (match value {
-                        Value::Register(s) => registers.get(s as usize)?,
-                        Value::Constant(v) => v,
-                    });
+                    Value::Register(s) => registers.get(s as usize)?,
+                    Value::Constant(v) => v,
+                });
                 registers.set(register as usize, new_value)?;
             }
             RevmInstruction::Xor { register, value } => {
@@ -758,9 +671,9 @@ impl CpuRevm {
                 let destiny_value = registers.get(register as usize)?;
                 let new_value = destiny_value
                     ^ (match value {
-                        Value::Register(s) => registers.get(s as usize)?,
-                        Value::Constant(v) => v,
-                    });
+                    Value::Register(s) => registers.get(s as usize)?,
+                    Value::Constant(v) => v,
+                });
                 registers.set(register as usize, new_value)?;
             }
             RevmInstruction::Shl { register, value } => {
@@ -875,6 +788,86 @@ impl CpuRevm {
             }
             _ => panic!("Not implemented yet"),
         };
+        Ok(())
+    }
+}
+
+impl CpuRevm {
+    pub fn new(capacity: usize) -> Result<CpuRevm, Error> {
+        let memory = Memory::new(capacity);
+        let allocator = Rc::new(RefCell::new(Allocator::new(capacity)));
+        let register_stack = Rc::new(RefCell::new(vec![]));
+        let mut functions = HashMap::new();
+        functions.insert(
+            "puts".to_owned(),
+            Function::Native(Box::new(NativeFunctions::puts)),
+        );
+        /*
+        TODO: Make scanf use the sandbox
+        functions.insert(
+            "scanf".to_owned(),
+            Function::Native(Box::new(|cpu, args| cpu.scanf(args))),
+        );
+        */
+        functions.insert(
+            "printf".to_owned(),
+            Function::Native(Box::new(NativeFunctions::printf)),
+        );
+        functions.insert(
+            "exit".to_owned(),
+            Function::Native(Box::new(NativeFunctions::exit)),
+        );
+        functions.insert(
+            "malloc".to_owned(),
+            Function::Native(Box::new(NativeFunctions::malloc)),
+        );
+        functions.insert(
+            "free".to_owned(),
+            Function::Native(Box::new(NativeFunctions::free)),
+        );
+        let mut cpu = CpuRevm {
+            allocator,
+            functions,
+            memory,
+            pc: 0,
+            register_stack,
+            call_stack: Vec::new(),
+            globals: HashMap::new(),
+            program: Program(vec![]),
+        };
+        cpu.add_function("puts")?;
+        cpu.add_function("printf")?;
+        cpu.add_function("malloc")?;
+        cpu.add_function("exit")?;
+        cpu.add_function("free")?;
+        let register_set = cpu.create_new_register_set()?;
+        cpu.register_stack.borrow_mut().push(register_set);
+        Ok(cpu)
+    }
+
+    fn add_function(&mut self, name: &'static str) -> Result<(), Error> {
+        match self.functions.get(name) {
+            Some(f) => {
+                let address = self.allocator.borrow_mut().malloc_t::<Function>()?;
+                self.memory.copy_t(f, address);
+            }
+            None => Err(RuntimeError::GlobalNotFound {
+                name: name.to_owned(),
+            })?,
+        };
+        Ok(())
+    }
+
+    pub fn execute_program(&mut self, program: Program) -> Result<(), Error> {
+        self.program = program;
+        self.pc = 0;
+        while !self.is_done() {
+            let instruction = self
+                .get_next_instruction()
+                .ok_or(RuntimeError::NoMoreInstructions)?;
+            self.execute_instruction(instruction)?;
+            self.increase_pc(1);
+        }
         Ok(())
     }
 
