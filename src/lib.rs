@@ -79,9 +79,11 @@ or
 extern crate failure;
 #[macro_use]
 extern crate runtime_fmt;
+extern crate libvm;
 use crate::allocator::Allocator;
 use crate::error::RuntimeError;
 use crate::instruction::{Program, RevmInstruction, Value};
+use crate::libvm::Cpu;
 use crate::memory::Memory;
 use crate::register_set::RegisterSet;
 use failure::Error;
@@ -358,38 +360,6 @@ impl NativeFunctions {
         let address = self.register_stack.borrow().last().unwrap().get(0)? as usize;
         self.allocator.borrow_mut().free(address).map(|_| 0)
     }
-}
-
-pub trait Instruction {
-    fn size(&self) -> Result<usize, Error>;
-    fn get_cycles(&self) -> Result<usize, Error>;
-}
-
-pub trait Cpu<I>
-where
-    I: Instruction,
-{
-    fn execute(&mut self) -> Result<usize, Error> {
-        let instruction = self
-            .get_next_instruction()
-            .ok_or(RuntimeError::NoMoreInstructions)?;
-        if !self.can_run() {
-            return Ok(0);
-        }
-        self.increase_pc(instruction.size()?);
-        let cycles = self.get_cycles_for_instruction(&instruction)?;
-        self.execute_instruction(instruction)?;
-        Ok(cycles)
-    }
-    fn get_cycles_for_instruction(&mut self, instruction: &I) -> Result<usize, Error> {
-        instruction.get_cycles()
-    }
-    fn execute_instruction(&mut self, instruction: I) -> Result<(), Error>;
-    fn get_pc(&self) -> usize;
-    fn get_next_instruction(&mut self) -> Option<I>;
-    fn can_run(&self) -> bool;
-    fn is_done(&self) -> bool;
-    fn increase_pc(&mut self, steps: usize);
 }
 
 pub struct CpuRevm {
