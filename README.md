@@ -1,8 +1,8 @@
-libvm-rs
-===========
-[![Build Status](https://travis-ci.org/Fantom-foundation/libvm-rs.svg?branch=master)](https://travis-ci.org/Fantom-foundation/libvm-rs)
+librevm-rs
+==========
+[![Build Status](https://travis-ci.org/Fantom-foundation/librevm-rs.svg?branch=master)](https://travis-ci.org/Fantom-foundation/librevm-rs)
 
-libvm-rs in Rust.
+librevm-rs in Rust.
 
 ## RFCs
 
@@ -25,7 +25,7 @@ $ cargo install --force cargo-make
 # Install rustfmt (Rust formatter)
 $ rustup component add rustfmt
 # Clone this repo
-$ git clone https://github.com/Fantom-foundation/libvm-rs && cd libvm-rs
+$ git clone https://github.com/Fantom-foundation/librevm-rs && cd librevm-rs
 # Run tests
 $ cargo test
 # Format, build and test
