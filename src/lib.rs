@@ -619,9 +619,9 @@ impl Cpu<RevmInstruction> for CpuRevm {
                 let destiny_value = registers.get(register as usize)?;
                 let new_value = destiny_value
                     & (match value {
-                    Value::Register(s) => registers.get(s as usize)?,
-                    Value::Constant(v) => v,
-                });
+                        Value::Register(s) => registers.get(s as usize)?,
+                        Value::Constant(v) => v,
+                    });
                 registers.set(register as usize, new_value)?;
             }
             RevmInstruction::Or { register, value } => {
@@ -630,9 +630,9 @@ impl Cpu<RevmInstruction> for CpuRevm {
                 let destiny_value = registers.get(register as usize)?;
                 let new_value = destiny_value
                     | (match value {
-                    Value::Register(s) => registers.get(s as usize)?,
-                    Value::Constant(v) => v,
-                });
+                        Value::Register(s) => registers.get(s as usize)?,
+                        Value::Constant(v) => v,
+                    });
                 registers.set(register as usize, new_value)?;
             }
             RevmInstruction::Xor { register, value } => {
@@ -641,9 +641,9 @@ impl Cpu<RevmInstruction> for CpuRevm {
                 let destiny_value = registers.get(register as usize)?;
                 let new_value = destiny_value
                     ^ (match value {
-                    Value::Register(s) => registers.get(s as usize)?,
-                    Value::Constant(v) => v,
-                });
+                        Value::Register(s) => registers.get(s as usize)?,
+                        Value::Constant(v) => v,
+                    });
                 registers.set(register as usize, new_value)?;
             }
             RevmInstruction::Shl { register, value } => {
