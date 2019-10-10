@@ -1,7 +1,7 @@
 use crate::error::ParsingError;
+use crate::libvm::Instruction;
 use failure::Error;
 use std::convert::TryFrom;
-use crate::libvm::Instruction;
 
 #[derive(Clone, Debug)]
 pub struct Program(pub Vec<RevmInstruction>);
